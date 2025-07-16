@@ -1,0 +1,9 @@
+vault_annotations:
+  aceapigeeclientid:
+    secret_path: "secret/xx/uat/ab1234/apigee/cred4"
+
+    {{- range $key, $val := .Values.vault_annotations }}
+    vault.hashicorp.com/agent-inject-secret-{{ $key }}: "{{ $val.secret_path }}"
+    vault.hashicorp.com/agent-inject-template-{{ $key }}: |
+      {{ printf "{{- with secret \\\"%s\\\" -}}\n{{ .Data.password }}\n{{- end }}" $val.secret_path | indent 6 }}
+    {{- end }}
