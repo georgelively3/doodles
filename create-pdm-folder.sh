@@ -111,3 +111,59 @@ echo "Project path: $repoPath"
 echo ""
 echo "Contents copied from sample:"
 ls -la "$repoPath"
+
+# Chain with create-pdm.sh if parentAssetId and assetId are available
+if [ -n "$parentAssetId" ] && [ -n "$assetId" ]; then
+    echo ""
+    echo "=========================================="
+    echo "Creating PDM structure..."
+    echo "=========================================="
+    
+    # Path to the create-pdm.sh script (in spring-boot-app folder)
+    PDM_SCRIPT="$SCRIPT_DIR/spring-boot-app/create-pdm.sh"
+    
+    # Check if create-pdm.sh exists
+    if [ -f "$PDM_SCRIPT" ]; then
+        # Make sure create-pdm.sh is executable
+        chmod +x "$PDM_SCRIPT"
+        
+        # Navigate to the repository directory
+        cd "$repoPath"
+        
+        # Call create-pdm.sh with mapped parameters
+        # productName=product, imageName=imageName, testEngine=cucumber, fabId=assetId
+        if "$PDM_SCRIPT" "product" "$imageName" "cucumber" "$assetId"; then
+            echo "✅ PDM structure created successfully"
+            
+            # Create zip file
+            if [ -d "pdm" ]; then
+                zipFileName="${repository}-pdm.zip"
+                echo "Creating zip file: $zipFileName"
+                
+                if zip -r "$zipFileName" pdm/; then
+                    echo "✅ Created zip file: $zipFileName"
+                    
+                    # Delete the pdm folder
+                    echo "Cleaning up pdm folder..."
+                    rm -rf pdm/
+                    echo "✅ PDM folder deleted"
+                else
+                    echo "❌ Failed to create zip file"
+                fi
+            else
+                echo "❌ PDM folder not found, skipping zip creation"
+            fi
+        else
+            echo "❌ Failed to create PDM structure"
+        fi
+        
+        # Return to original directory
+        cd "$SCRIPT_DIR"
+    else
+        echo "⚠️  create-pdm.sh not found at: $PDM_SCRIPT"
+        echo "Skipping PDM creation"
+    fi
+else
+    echo ""
+    echo "⚠️  Skipping PDM creation (parentAssetId or assetId not available)"
+fi
