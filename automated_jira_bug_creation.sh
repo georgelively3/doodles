@@ -126,6 +126,10 @@ auth_header="Authorization: Basic $(echo -n "$username:$password" | base64)"
 if curl -s -L -H "$auth_header" "$confluence_url" > "$temp_html"; then
     echo "✅ Successfully fetched Confluence page"
     
+    # Get file size for debugging
+    file_size=$(wc -c < "$temp_html")
+    echo "📄 Page content size: $file_size bytes"
+    
     # Check if we got actual content (not a login redirect)
     if grep -q "login" "$temp_html" && ! grep -q "<table" "$temp_html"; then
         echo "❌ Authentication failed - got redirected to login page"
@@ -133,6 +137,64 @@ if curl -s -L -H "$auth_header" "$confluence_url" > "$temp_html"; then
         rm -f "$temp_html" "$temp_table"
         exit 1
     fi
+    
+    # Debug: Check what kind of content we received
+    echo "🔍 Content analysis:"
+    
+    # Check for common Confluence indicators
+    if grep -q "confluence" "$temp_html"; then
+        echo "  ✅ Confluence content detected"
+    else
+        echo "  ⚠️  No obvious Confluence markers found"
+    fi
+    
+    # Check for authentication success
+    if grep -q "sign.*in\|log.*in\|unauthorized\|access.*denied" "$temp_html"; then
+        echo "  ❌ Possible authentication issue detected"
+    else
+        echo "  ✅ No authentication errors detected"
+    fi
+    
+    # Check for frames/iframes
+    if grep -q "<iframe\|<frame" "$temp_html"; then
+        echo "  ⚠️  Frames/iframes detected - this may complicate table extraction"
+        iframe_count=$(grep -c "<iframe" "$temp_html")
+        echo "    Found $iframe_count iframe(s)"
+        
+        # Try to extract iframe sources
+        echo "    Iframe sources found:"
+        grep -o 'src="[^"]*"' "$temp_html" | head -5 | sed 's/^/      /'
+    else
+        echo "  ✅ No frames detected"
+    fi
+    
+    # Check for tables
+    table_count=$(grep -c "<table" "$temp_html")
+    echo "  📊 Found $table_count table(s) in main content"
+    
+    if [ "$table_count" -eq 0 ]; then
+        echo "  ❌ No tables found in main page content"
+        echo "  💡 This could be due to:"
+        echo "     - Content in iframes/frames"
+        echo "     - Dynamic content loaded by JavaScript"
+        echo "     - Tables in embedded views"
+    else
+        echo "  ✅ Tables found in content"
+        
+        # Show table structure info
+        echo "  📋 Table analysis:"
+        awk '/<table/,/<\/table>/ {
+            if (/<table/) table_start = NR
+            if (/<tr/) tr_count++
+            if (/<th/) th_count++
+            if (/<td/) td_count++
+            if (/<\/table>/) {
+                print "    Table at line " table_start ": " tr_count " rows, " th_count " headers, " td_count " cells"
+                tr_count = 0; th_count = 0; td_count = 0
+            }
+        }' "$temp_html"
+    fi
+    
 else
     echo "❌ Failed to fetch Confluence page"
     rm -f "$temp_html" "$temp_table"
@@ -144,45 +206,183 @@ echo "=========================================="
 echo "Step 2: Parsing table data..."
 echo "=========================================="
 
-# Extract table from HTML and parse rows
-echo "Parsing table with columns: Title, Start, End, # of ppl involved, Comments, Resolution, Next steps, On Call required SME"
+# Function to try extracting tables from iframe sources
+try_iframe_tables() {
+    echo "🔍 Attempting to extract tables from iframes..."
+    
+    # Extract iframe sources and try each one
+    grep -o 'src="[^"]*"' "$temp_html" | cut -d'"' -f2 | while read -r iframe_src; do
+        # Skip if it's not a full URL
+        if [[ "$iframe_src" =~ ^https?:// ]] || [[ "$iframe_src" =~ ^/ ]]; then
+            # Convert relative URLs to absolute
+            if [[ "$iframe_src" =~ ^/ ]]; then
+                base_url=$(echo "$confluence_url" | sed 's|^\(https\?://[^/]*\).*|\1|')
+                iframe_url="$base_url$iframe_src"
+            else
+                iframe_url="$iframe_src"
+            fi
+            
+            echo "  📄 Trying iframe: $iframe_url"
+            
+            # Create temp file for iframe content
+            temp_iframe=$(mktemp)
+            
+            if curl -s -L -H "$auth_header" "$iframe_url" > "$temp_iframe"; then
+                iframe_tables=$(grep -c "<table" "$temp_iframe")
+                if [ "$iframe_tables" -gt 0 ]; then
+                    echo "    ✅ Found $iframe_tables table(s) in iframe"
+                    # Try to parse this iframe's tables
+                    if parse_tables_from_file "$temp_iframe" > "$temp_table"; then
+                        iframe_rows=$(wc -l < "$temp_table")
+                        if [ "$iframe_rows" -gt 0 ]; then
+                            echo "    🎯 Successfully extracted $iframe_rows rows from iframe!"
+                            rm -f "$temp_iframe"
+                            return 0
+                        fi
+                    fi
+                else
+                    echo "    ❌ No tables in this iframe"
+                fi
+            else
+                echo "    ❌ Failed to fetch iframe content"
+            fi
+            
+            rm -f "$temp_iframe"
+        fi
+    done
+    
+    return 1
+}
 
-# Use awk to extract table rows (skipping header)
-awk '
-/<table/,/<\/table>/ {
-    if (/<tr/) {
+# Function to parse tables from a file
+parse_tables_from_file() {
+    local file="$1"
+    
+    # Enhanced awk script for better table parsing
+    awk '
+    BEGIN { 
+        in_table = 0
+        in_row = 0
+        skip_header = 1
+    }
+    /<table/ { 
+        in_table = 1
+        print "<!-- Table found -->" > "/dev/stderr"
+    }
+    /<\/table>/ { 
+        in_table = 0 
+        skip_header = 1
+    }
+    in_table && /<tr/ {
         in_row = 1
         row = ""
         cells = 0
+        cell_content = ""
     }
-    if (in_row && /<td/) {
-        gsub(/<[^>]*>/, "", $0)  # Remove HTML tags
-        gsub(/^[ \t]+|[ \t]+$/, "", $0)  # Trim whitespace
-        if ($0 != "") {
-            if (cells > 0) row = row "|"
-            row = row $0
-            cells++
+    in_table && in_row && /<t[hd]/ {
+        # Extract cell content, handling nested tags
+        cell_line = $0
+        gsub(/<t[hd][^>]*>/, "", cell_line)  # Remove opening tags
+        gsub(/<\/t[hd]>/, "|CELL_END|", cell_line)  # Mark cell endings
+        gsub(/<[^>]*>/, "", cell_line)  # Remove other HTML tags
+        gsub(/&nbsp;/, " ", cell_line)  # Convert HTML entities
+        gsub(/&amp;/, "\\&", cell_line)
+        gsub(/&lt;/, "<", cell_line)
+        gsub(/&gt;/, ">", cell_line)
+        gsub(/&quot;/, "\"", cell_line)
+        
+        # Split by cell markers and process
+        split(cell_line, cell_parts, /\|CELL_END\|/)
+        for (i in cell_parts) {
+            if (cell_parts[i] != "") {
+                gsub(/^[ \t\n\r]+|[ \t\n\r]+$/, "", cell_parts[i])  # Trim
+                if (cell_parts[i] != "") {
+                    if (cells > 0) row = row "|"
+                    row = row cell_parts[i]
+                    cells++
+                }
+            }
         }
     }
-    if (/<\/tr>/ && in_row) {
-        if (cells >= 8 && NR > first_row) {  # Skip header row, ensure we have all columns
-            print row
+    in_table && /<\/tr>/ && in_row {
+        if (cells >= 8) {
+            if (skip_header) {
+                print "<!-- Skipping header row: " cells " cells -->" > "/dev/stderr"
+                skip_header = 0
+            } else {
+                print row
+                print "<!-- Data row: " cells " cells -->" > "/dev/stderr"
+            }
+        } else if (cells > 0) {
+            print "<!-- Row with " cells " cells (need 8): " row " -->" > "/dev/stderr"
         }
-        if (cells >= 8 && !first_row) first_row = NR  # Mark first data row
         in_row = 0
     }
-}' "$temp_html" > "$temp_table"
+    ' "$file" 2>"${file}.debug"
+}
+
+# Extract table from HTML and parse rows
+echo "Parsing table with columns: Title, Start, End, # of ppl involved, Comments, Resolution, Next steps, On Call required SME"
+
+# First, try parsing tables from main content
+echo "🔍 Attempting to parse tables from main page content..."
+parse_tables_from_file "$temp_html" > "$temp_table"
 
 # Count the number of rows found
 row_count=$(wc -l < "$temp_table")
-echo "Found $row_count data rows in the table"
+echo "Found $row_count data rows in main content"
 
+# If no rows found and we detected iframes, try iframe content
+if [ "$row_count" -eq 0 ] && grep -q "<iframe" "$temp_html"; then
+    echo ""
+    echo "🔄 No data in main content, trying iframe sources..."
+    if try_iframe_tables; then
+        row_count=$(wc -l < "$temp_table")
+        echo "✅ Found $row_count rows in iframe content"
+    fi
+fi
+
+# Enhanced debugging output
 if [ "$row_count" -eq 0 ]; then
-    echo "❌ No table data found. Please check:"
-    echo "  - The Confluence page contains a table"
-    echo "  - Your authentication is working correctly"
-    echo "  - The table has the expected 8 columns"
-    rm -f "$temp_html" "$temp_table"
+    echo ""
+    echo "❌ No table data found. Detailed diagnosis:"
+    echo ""
+    
+    # Show debug info from table parsing
+    if [ -f "${temp_html}.debug" ]; then
+        echo "🔍 Table parsing debug info:"
+        cat "${temp_html}.debug" | head -10
+        echo ""
+    fi
+    
+    echo "📋 Troubleshooting checklist:"
+    echo "  1. ✅ Authentication: $(if grep -q "sign.*in\|log.*in" "$temp_html"; then echo "❌ Failed"; else echo "✅ Working"; fi)"
+    echo "  2. ✅ Page content: $(if [ $(wc -c < "$temp_html") -lt 1000 ]; then echo "❌ Too small"; else echo "✅ Adequate size"; fi)"
+    echo "  3. ✅ Tables present: $(if [ $(grep -c "<table" "$temp_html") -gt 0 ]; then echo "✅ Found"; else echo "❌ None found"; fi)"
+    echo "  4. ✅ Expected columns: Needs manual verification"
+    echo "  5. ✅ Iframe content: $(if grep -q "<iframe" "$temp_html"; then echo "⚠️ Detected (tried extraction)"; else echo "✅ Not applicable"; fi)"
+    echo ""
+    echo "💡 Possible solutions:"
+    echo "  - Try a different Confluence URL (direct table view)"
+    echo "  - Export the page as Word/PDF and copy table data"
+    echo "  - Check if the table is in a restricted view"
+    echo "  - Verify the page URL is accessible without login"
+    
+    # Offer to save debug files
+    echo ""
+    read -p "Save debug files for manual inspection? (y/N): " save_debug
+    if [[ "$save_debug" =~ ^[Yy]$ ]]; then
+        debug_dir="debug_$(date +%Y%m%d_%H%M%S)"
+        mkdir -p "$debug_dir"
+        cp "$temp_html" "$debug_dir/page_content.html"
+        if [ -f "${temp_html}.debug" ]; then
+            cp "${temp_html}.debug" "$debug_dir/table_parsing.log"
+        fi
+        echo "Debug files saved to: $debug_dir/"
+        echo "You can open page_content.html in a browser to inspect the structure"
+    fi
+    
+    rm -f "$temp_html" "$temp_table" "${temp_html}.debug"
     exit 1
 fi
 
@@ -305,7 +505,7 @@ while IFS='|' read -r title start end people_involved comments resolution next_s
 done < "$temp_table"
 
 # Cleanup temporary files
-rm -f "$temp_html" "$temp_table"
+rm -f "$temp_html" "$temp_table" "${temp_html}.debug"
 
 echo ""
 echo "=========================================="
