@@ -80,8 +80,65 @@ while ! validate_url "$jira_server"; do
     prompt_input "Jira server URL" jira_server "required"
 done
 
+# Normalize Jira URL - remove trailing slashes and ensure it's just the base URL
+jira_server=$(echo "$jira_server" | sed 's|/$||' | sed 's|/rest/api/.*||')
+
 # Get authentication info
 get_auth_credentials
+
+# Build authentication header (used for both Confluence and Jira)
+auth_header="Authorization: Basic $(echo -n "$username:$password" | base64)"
+
+# Test Jira connection
+echo ""
+echo "=========================================="
+echo "Testing Jira Connection..."
+echo "=========================================="
+
+echo "Testing Jira API connection..."
+jira_test_url="$jira_server/rest/api/2/myself"
+echo "Testing URL: $jira_test_url"
+
+jira_test_response=$(curl -s -w "HTTP_CODE:%{http_code}" -H "$auth_header" "$jira_test_url")
+jira_http_code=$(echo "$jira_test_response" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
+jira_content=$(echo "$jira_test_response" | sed 's/HTTP_CODE:[0-9]*$//')
+
+echo "HTTP Response Code: $jira_http_code"
+
+case "$jira_http_code" in
+    200)
+        echo "✅ Jira authentication successful!"
+        jira_user=$(echo "$jira_content" | grep -o '"displayName":"[^"]*"' | cut -d'"' -f4)
+        if [ -n "$jira_user" ]; then
+            echo "   Logged in as: $jira_user"
+        fi
+        ;;
+    401)
+        echo "❌ Jira authentication failed (401 Unauthorized)"
+        echo "   Please check your username and password for Jira access"
+        echo "   Note: Jira may have different credentials than Confluence"
+        exit 1
+        ;;
+    403)
+        echo "❌ Jira access forbidden (403 Forbidden)"
+        echo "   Your account may not have permission to access Jira API"
+        exit 1
+        ;;
+    404)
+        echo "❌ Jira API endpoint not found (404)"
+        echo "   Please verify the Jira server URL: $jira_server"
+        echo "   Try variations like:"
+        echo "   - $jira_server (if it's Jira Cloud)"
+        echo "   - $jira_server:8080 (if it's Jira Server on port 8080)"
+        exit 1
+        ;;
+    *)
+        echo "❌ Unexpected response from Jira (HTTP $jira_http_code)"
+        echo "   Response: $jira_content"
+        echo "   Please check the Jira server URL and try again"
+        exit 1
+        ;;
+esac
 
 # Optional: Dry run mode
 echo ""
@@ -118,9 +175,6 @@ temp_html=$(mktemp)
 temp_table=$(mktemp)
 
 echo "Fetching page: $confluence_url"
-
-# Build curl command based on authentication method
-auth_header="Authorization: Basic $(echo -n "$username:$password" | base64)"
 
 # Fetch Confluence page
 if curl -s -L -H "$auth_header" "$confluence_url" > "$temp_html"; then
@@ -432,53 +486,73 @@ create_jira_ticket() {
     else
         echo "🎫 Creating Jira ticket: $title"
         
-        # Prepare JSON payload
+        # Prepare JSON payload (using API v2 format for broader compatibility)
         local json_payload=$(cat <<EOF
 {
   "fields": {
     "project": {"key": "PDMSUPPORT"},
     "issuetype": {"name": "Bug"},
     "summary": "$title",
-    "description": {
-      "type": "doc",
-      "version": 1,
-      "content": [
-        {
-          "type": "paragraph",
-          "content": [
-            {
-              "type": "text",
-              "text": "$description"
-            }
-          ]
-        }
-      ]
-    }
+    "description": "$description"
   }
 }
 EOF
 )
         
-        # Create Jira ticket
-        local response=$(curl -s -X POST \
+        # Create Jira ticket using API v2
+        local response=$(curl -s -w "HTTP_CODE:%{http_code}" -X POST \
             -H "$auth_header" \
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
-            "$jira_server/rest/api/3/issue" \
+            "$jira_server/rest/api/2/issue" \
             -d "$json_payload")
         
-        # Parse response
-        if echo "$response" | grep -q '"key"'; then
-            local ticket_key=$(echo "$response" | grep -o '"key":"[^"]*"' | cut -d'"' -f4)
-            echo "✅ Created ticket: $ticket_key"
-            echo "   Summary: $title"
-            echo "   URL: $jira_server/browse/$ticket_key"
-            created_tickets+=("$ticket_key")
-        else
-            echo "❌ Failed to create ticket: $title"
-            echo "   Error response: $response"
-            failed_tickets+=("$title")
-        fi
+        # Extract HTTP code and content
+        local http_code=$(echo "$response" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
+        local response_content=$(echo "$response" | sed 's/HTTP_CODE:[0-9]*$//')
+        
+        # Parse response with detailed error handling
+        case "$http_code" in
+            201)
+                if echo "$response_content" | grep -q '"key"'; then
+                    local ticket_key=$(echo "$response_content" | grep -o '"key":"[^"]*"' | cut -d'"' -f4)
+                    echo "✅ Created ticket: $ticket_key"
+                    echo "   Summary: $title"
+                    echo "   URL: $jira_server/browse/$ticket_key"
+                    created_tickets+=("$ticket_key")
+                else
+                    echo "❌ Ticket creation succeeded but couldn't parse ticket key"
+                    echo "   Response: $response_content"
+                    failed_tickets+=("$title")
+                fi
+                ;;
+            400)
+                echo "❌ Bad request (400) - Invalid ticket data: $title"
+                if echo "$response_content" | grep -q "project"; then
+                    echo "   Check: Project 'PDMSUPPORT' exists and you have access"
+                fi
+                if echo "$response_content" | grep -q "issuetype"; then
+                    echo "   Check: Issue type 'Bug' is available in the project"
+                fi
+                echo "   Full error: $response_content"
+                failed_tickets+=("$title")
+                ;;
+            401)
+                echo "❌ Authentication failed (401) for ticket: $title"
+                echo "   Your session may have expired"
+                failed_tickets+=("$title")
+                ;;
+            403)
+                echo "❌ Permission denied (403) for ticket: $title"
+                echo "   You may not have permission to create issues in project PDMSUPPORT"
+                failed_tickets+=("$title")
+                ;;
+            *)
+                echo "❌ Failed to create ticket (HTTP $http_code): $title"
+                echo "   Error response: $response_content"
+                failed_tickets+=("$title")
+                ;;
+        esac
         echo ""
     fi
 }
