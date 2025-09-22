@@ -34,54 +34,29 @@ prompt_input() {
     done
 }
 
-# Function to get SSO session info
-get_sso_auth() {
+# Function to get authentication credentials
+get_auth_credentials() {
     echo ""
     echo "=========================================="
-    echo "SSO Authentication Setup"
+    echo "Authentication Setup"
     echo "=========================================="
-    echo "Since your organization uses SSO, you'll need to provide session authentication."
-    echo "Please choose one of the following options:"
-    echo ""
-    echo "1. Provide session cookies (recommended)"
-    echo "2. Provide authorization header"
-    echo "3. Use browser session (requires manual cookie export)"
+    echo "Please provide your corporate login credentials:"
     echo ""
     
-    read -p "Choose option (1-3): " auth_option
+    prompt_input "Username (your corporate login)" username "required"
     
-    case $auth_option in
-        1)
-            echo "Please export your session cookies from your browser:"
-            echo "1. Log into Confluence/Jira in your browser"
-            echo "2. Open Developer Tools (F12)"
-            echo "3. Go to Application/Storage > Cookies"
-            echo "4. Copy the cookie values"
-            echo ""
-            prompt_input "Confluence cookies (format: 'cookie1=value1; cookie2=value2')" confluence_cookies "required"
-            prompt_input "Jira cookies (format: 'cookie1=value1; cookie2=value2')" jira_cookies "required"
-            ;;
-        2)
-            echo "Please provide your authorization headers:"
-            prompt_input "Confluence Authorization header (e.g., 'Bearer token' or 'Basic base64')" confluence_auth "required"
-            prompt_input "Jira Authorization header (e.g., 'Bearer token' or 'Basic base64')" jira_auth "required"
-            ;;
-        3)
-            echo "⚠️  Browser session mode selected."
-            echo "Make sure you're logged into both Confluence and Jira in your default browser."
-            confluence_cookies=""
-            jira_cookies=""
-            confluence_auth=""
-            jira_auth=""
-            ;;
-        *)
-            echo "Invalid option. Defaulting to browser session mode."
-            confluence_cookies=""
-            jira_cookies=""
-            confluence_auth=""
-            jira_auth=""
-            ;;
-    esac
+    # Read password securely (without echoing to screen)
+    echo -n "Password: "
+    read -s password
+    echo ""  # Add newline after password input
+    
+    if [ -z "$password" ]; then
+        echo "Password cannot be empty. Please try again."
+        get_auth_credentials
+        return
+    fi
+    
+    echo "✅ Credentials captured"
 }
 
 # Collect user inputs interactively
@@ -106,7 +81,7 @@ while ! validate_url "$jira_server"; do
 done
 
 # Get authentication info
-get_sso_auth
+get_auth_credentials
 
 # Optional: Dry run mode
 echo ""
@@ -123,6 +98,7 @@ echo ""
 echo "Configuration Summary:"
 echo "Confluence URL: $confluence_url"
 echo "Jira Server: $jira_server"
+echo "Username: $username"
 echo "Dry Run Mode: $DRY_RUN"
 echo ""
 
@@ -144,22 +120,16 @@ temp_table=$(mktemp)
 echo "Fetching page: $confluence_url"
 
 # Build curl command based on authentication method
-if [ -n "$confluence_cookies" ]; then
-    curl_auth_confluence="-H 'Cookie: $confluence_cookies'"
-elif [ -n "$confluence_auth" ]; then
-    curl_auth_confluence="-H 'Authorization: $confluence_auth'"
-else
-    curl_auth_confluence="--cookie-jar /tmp/cookies --cookie /tmp/cookies"
-fi
+auth_header="Authorization: Basic $(echo -n "$username:$password" | base64)"
 
 # Fetch Confluence page
-if eval "curl -s -L $curl_auth_confluence '$confluence_url' > '$temp_html'"; then
+if curl -s -L -H "$auth_header" "$confluence_url" > "$temp_html"; then
     echo "✅ Successfully fetched Confluence page"
     
     # Check if we got actual content (not a login redirect)
     if grep -q "login" "$temp_html" && ! grep -q "<table" "$temp_html"; then
         echo "❌ Authentication failed - got redirected to login page"
-        echo "Please check your SSO session and authentication details"
+        echo "Please check your username and password"
         rm -f "$temp_html" "$temp_table"
         exit 1
     fi
@@ -289,17 +259,13 @@ create_jira_ticket() {
 EOF
 )
         
-        # Build curl command for Jira
-        if [ -n "$jira_cookies" ]; then
-            curl_auth_jira="-H 'Cookie: $jira_cookies'"
-        elif [ -n "$jira_auth" ]; then
-            curl_auth_jira="-H 'Authorization: $jira_auth'"
-        else
-            curl_auth_jira="--cookie-jar /tmp/cookies --cookie /tmp/cookies"
-        fi
-        
         # Create Jira ticket
-        local response=$(eval "curl -s -X POST $curl_auth_jira -H 'Content-Type: application/json' -H 'Accept: application/json' '$jira_server/rest/api/3/issue' -d '$json_payload'")
+        local response=$(curl -s -X POST \
+            -H "$auth_header" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            "$jira_server/rest/api/3/issue" \
+            -d "$json_payload")
         
         # Parse response
         if echo "$response" | grep -q '"key"'; then
