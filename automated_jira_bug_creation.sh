@@ -607,3 +607,4 @@ else
         printf '   %s\n' "${failed_tickets[@]}"
     fi
 fi
+# end at 3:25 9/22
