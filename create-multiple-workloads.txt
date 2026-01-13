@@ -256,9 +256,9 @@ spec:
     deployFirst: true
     helm:
       chartRepoUrl: pdm-ba0270-ops
-      chartPath: $organization/$parentAssetId/common
+      chartPath: $organization/$bomName/common
       chartVersion: "1.0.0"
-      valuesPath: $organization/$parentAssetId/values/values-\$ENV.yaml
+      valuesPath: $organization/$bomName/values/values-\$ENV.yaml
       revision: $branch
 EOF
 
@@ -272,9 +272,9 @@ for i in "${!assetIds[@]}"; do
     kind: helm
     helm:
       chartName: $assetId-application
-      chartPath: $organization/$repo/helm-$assetId
+      chartPath: $organization/$bomName/helm-$assetId
       chartVersion: "1.0.0"
-      valuesPath: $organization/$repo/values/values-\$ENV.yaml
+      valuesPath: $organization/$bomName/values/values-\$ENV.yaml
       revision: $branch
 EOF
 done
