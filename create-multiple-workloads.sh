@@ -1,9 +1,10 @@
 #!/bin/bash
 
-# Check if at least 2 arguments are provided (branch + at least one git URL)
-if [ $# -lt 2 ]; then
-    echo "Usage: $0 <branch> <git-url1> [git-url2] [git-url3] ..."
-    echo "Example: $0 develop https://bitbucket.com/scm/george/raj_ab1234_cd3456.git https://bitbucket.com/scm/george/raj_ab1234_ef7890.git"
+# Check if at least 3 arguments are provided (branch + bomName + at least one git URL)
+if [ $# -lt 3 ]; then
+    echo "Usage: $0 <branch> <bomName> <git-url1> [git-url2] [git-url3] ..."
+    echo "Example: $0 develop pdmexp https://bitbucket.com/scm/george/raj_ab1234_cd3456.git https://bitbucket.com/scm/george/raj_ab1234_ef7890.git"
+    echo "Note: bomName must be 6 alphanumeric characters or less"
     exit 1
 fi
 
@@ -13,6 +14,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Assign branch from first argument
 branch="$1"
 shift  # Remove the first argument (branch) from the argument list
+
+# Assign bomName from second argument and validate
+bomName="$1"
+shift  # Remove the second argument (bomName) from the argument list
+
+# Validate bomName (6 alphanumeric characters or less)
+if [[ ! "$bomName" =~ ^[a-zA-Z0-9]{1,6}$ ]]; then
+    echo "Error: bomName must be 1-6 alphanumeric characters. Got: '$bomName'"
+    exit 1
+fi
 
 # Arrays to store parsed information from all git URLs
 declare -a assetIds
@@ -84,6 +95,7 @@ echo ""
 echo "=========================================="
 echo "Creating MicroAG structure"
 echo "=========================================="
+echo "BOM Name: $bomName"
 echo "Organization: $organization"
 echo "Parent Asset ID: $parentAssetId"
 echo "Branch: $branch"
@@ -93,8 +105,8 @@ for i in "${!assetIds[@]}"; do
 done
 echo ""
 
-# Create directory structure: organization/parentAssetId/
-microAgPath="$SCRIPT_DIR/$organization/$parentAssetId"
+# Create directory structure: organization/bomName/
+microAgPath="$SCRIPT_DIR/$organization/$bomName"
 
 if [ -d "$microAgPath" ]; then
     echo "Warning: MicroAG directory already exists: $microAgPath"
@@ -128,10 +140,10 @@ cp -r "$samplePath/target" "$microAgPath/"
 echo "Copied base structure from sample (bom, common, helm, values, target)"
 
 # Replace placeholders in base helm directory
-find "$microAgPath/helm" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
+find "$microAgPath/helm" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
 
 # Replace placeholders in common directory
-find "$microAgPath/common" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
+find "$microAgPath/common" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
 
 # Create helm-<assetId> directory for each workload
 echo ""
@@ -160,7 +172,7 @@ for i in "${!assetIds[@]}"; do
     repo="${repositories[$i]}"
     imageName="$repo"
     
-    find "$helmDir" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$assetId/g; s/<organization>/$organization/g; s/<repository>/$repo/g; s/<imageName>/$imageName/g; s/<branch>/$branch/g" {} \;
+    find "$helmDir" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$assetId/g; s/<organization>/$organization/g; s/<repository>/$repo/g; s/<imageName>/$imageName/g; s/<branch>/$branch/g" {} \;
 done
 
 # Create mag.yaml file
@@ -203,7 +215,7 @@ cat > "$bomYamlPath" << EOF
 apiVersion: cyclonedx/v1.4
 kind: BillOfMaterials
 metadata:
-  name: $parentAssetId
+  name: $bomName
   version: "1.0.0"
   timestamp: "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 spec:
@@ -272,15 +284,16 @@ echo ""
 echo "Replacing placeholder values in files..."
 
 # Replace in bom directory
-find "$microAgPath/bom" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
+find "$microAgPath/bom" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
 
 # Replace in values directory
-find "$microAgPath/values" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
+find "$microAgPath/values" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
 
 # Replace in target directory
-find "$microAgPath/target" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
+find "$microAgPath/target" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
 
 echo "Replaced placeholders:"
+echo "  <bomName> -> $bomName"
 echo "  <parentAssetId> -> $parentAssetId"
 echo "  <organization> -> $organization"
 echo "  <branch> -> $branch"
@@ -352,7 +365,7 @@ if [ -d "$sampleValuesPath" ]; then
             fi
             
             # Replace other placeholders in values files
-            sed -i "s/<parentAssetId>/$parentAssetId/g; s/<product>/$product/g; s/<branch>/$branch/g" "$valuesFile"
+            sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<product>/$product/g; s/<branch>/$branch/g" "$valuesFile"
         fi
     done
     
@@ -384,7 +397,7 @@ echo "Path: $microAgPath"
 echo ""
 echo "Structure:"
 echo "$organization/"
-echo "  $parentAssetId/"
+echo "  $bomName/"
 echo "    mag.yaml (with common + ${#assetIds[@]} workloads)"
 echo "    bom/"
 echo "      bom.yaml (with common + ${#assetIds[@]} workloads)"
