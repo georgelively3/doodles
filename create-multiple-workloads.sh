@@ -29,6 +29,7 @@ fi
 declare -a assetIds
 declare -a repositories
 declare -a products
+declare -a gitUrls
 organization=""
 parentAssetId=""
 
@@ -84,6 +85,7 @@ for gitUrl in "$@"; do
     echo "  Asset ID: $assetId"
     
     # Store information
+    gitUrls+=("$gitUrl")
     assetIds+=("$assetId")
     repositories+=("$repo")
     products+=("$prod")
@@ -411,3 +413,42 @@ echo "    values/"
 echo "    target/"
 echo ""
 echo "🎉 All workloads configured successfully!"
+
+# Execute create-pdm-folder.sh for each repository
+echo ""
+echo "=========================================="
+echo "Creating PDM folders for each workload..."
+echo "=========================================="
+
+PDM_SCRIPT="$SCRIPT_DIR/create-pdm-folder.sh"
+
+if [ -f "$PDM_SCRIPT" ]; then
+    # Make sure create-pdm-folder.sh is executable
+    chmod +x "$PDM_SCRIPT"
+    
+    # Execute for each repository
+    for i in "${!assetIds[@]}"; do
+        gitUrl="${gitUrls[$i]}"
+        assetId="${assetIds[$i]}"
+        repo="${repositories[$i]}"
+        
+        echo ""
+        echo "[$((i+1))/${#assetIds[@]}] Creating PDM folder for $repo..."
+        echo "----------------------------------------"
+        
+        # Call create-pdm-folder.sh with the git URL and branch
+        if bash "$PDM_SCRIPT" "$gitUrl" "$branch"; then
+            echo "✅ PDM folder created successfully for $repo"
+        else
+            echo "❌ Failed to create PDM folder for $repo"
+        fi
+    done
+    
+    echo ""
+    echo "=========================================="
+    echo "✅ All PDM folders created!"
+    echo "=========================================="
+else
+    echo "Warning: create-pdm-folder.sh not found at: $PDM_SCRIPT"
+    echo "Skipping PDM folder creation"
+fi
