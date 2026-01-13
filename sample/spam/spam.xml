@@ -1,0 +1,4 @@
+<?xml versino="1.0" encoding="UTF-8"?>
+<product id="<parentAssetId>" name="<parentAssetId>" version="1.0.0">
+    <fab id="<bomName>" name="<bomName>" direction="outbound" FABtype="Web UI"></fab>
+</product>
