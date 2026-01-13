@@ -45,12 +45,15 @@ spec:
     deployFirst: true
     helm:
       chartRepoUrl: pdm-ba0270-ops
-      chartPath: <organization>/<repository>/common
+      chartPath: <organization>/<bomName>/common
       chartVersion: "1.0.0"
-      valuesPath: <organization>/<repository>/values/values-$ENV.yaml
+      valuesPath: <organization>/<bomName>/values/values-$ENV.yaml
       revision: <branch>
   - name: helm-<assetId>
     kind: helm
+    options:
+      setString:
+        - <assetId>Svc.ImageTag=$CONTAINER_IMAGE_TAG
     helm:
       chartName: sample-application
       chartPath: <organization>/<repository>/helm
