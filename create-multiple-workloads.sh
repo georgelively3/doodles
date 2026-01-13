@@ -316,10 +316,6 @@ if [ -d "$sampleValuesPath" ]; then
                 # Get content before template
                 head -n $((templateStart - 1)) "$valuesFile" > "$tmpFile"
                 
-                # Add the template start comment
-                echo "# workload service values template" >> "$tmpFile"
-                echo "#####################################################################" >> "$tmpFile"
-                
                 # Extract template content (between the comment markers, excluding the markers themselves)
                 templateContent=$(sed -n "$((templateStart + 2)),$((templateEnd - 2))p" "$valuesFile")
                 
@@ -329,6 +325,11 @@ if [ -d "$sampleValuesPath" ]; then
                     assetId="${assetIds[$i]}"
                     repo="${repositories[$i]}"
                     imageName="$repo"
+                    
+                    # Add header comment for this workload
+                    echo "#####################################################################" >> "$tmpFile"
+                    echo "# $assetId Service" >> "$tmpFile"
+                    echo "#####################################################################" >> "$tmpFile"
                     
                     # Replace placeholders in template and append
                     echo "$templateContent" | sed "s/<assetId>/$assetId/g; s/<imageName>/$imageName/g; s/<targetPort>/$targetPort/g" >> "$tmpFile"
@@ -340,10 +341,6 @@ if [ -d "$sampleValuesPath" ]; then
                     
                     ((targetPort++))
                 done
-                
-                # Add the template end comment
-                echo "#####################################################################" >> "$tmpFile"
-                echo "# end of workload service values template" >> "$tmpFile"
                 
                 # Get content after template
                 tail -n +$((templateEnd + 1)) "$valuesFile" >> "$tmpFile"
