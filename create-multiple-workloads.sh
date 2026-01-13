@@ -137,15 +137,19 @@ fi
 cp -r "$samplePath/bom" "$microAgPath/"
 cp -r "$samplePath/common" "$microAgPath/"
 cp -r "$samplePath/helm" "$microAgPath/"
+cp -r "$samplePath/spam" "$microAgPath/"
 cp -r "$samplePath/values" "$microAgPath/"
 cp -r "$samplePath/target" "$microAgPath/"
-echo "Copied base structure from sample (bom, common, helm, values, target)"
+echo "Copied base structure from sample (bom, common, helm, spam, values, target)"
 
 # Replace placeholders in base helm directory
 find "$microAgPath/helm" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
 
 # Replace placeholders in common directory
 find "$microAgPath/common" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
+
+# Replace placeholders in spam directory
+find "$microAgPath/spam" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
 
 # Create helm-<assetId> directory for each workload
 echo ""
