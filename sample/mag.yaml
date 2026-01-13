@@ -1,0 +1,11 @@
+mag:
+  - name: "<organization>~<repository>"
+    type: "owned"
+    description: "<organization> <repository>"
+    bomPath: "bom/bom.yaml"
+    spamFolder: "spam"
+    workloads:
+      - name: "common"
+      - name: "helm-<assetId>"
+        images:
+          - "<imageName>"
