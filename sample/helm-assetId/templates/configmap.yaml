@@ -8,7 +8,7 @@ metadata:
 data:
   application.yml: |
     server:
-      port: {{ .Values.service.targetPort }}
+      port: {{ .Values.<assetId>Svc.targetPort }}
     spring:
       application:
         name: {{ include "sample-application.name" . }}

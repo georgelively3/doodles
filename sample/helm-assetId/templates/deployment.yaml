@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "sample-application.fullname" . }}
+  name: {{ .Values.<assetId>Svc.Id }}-{{ Values.AbbreviatedEnv }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "sample-application.labels" . | nindent 4 }}
@@ -33,11 +33,11 @@ spec:
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.<assetId>Svc.Image }}:{{ .Values.<assetId>Svc.ImageTag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: {{ .Values.service.targetPort }}
+              containerPort: {{ .Values.<assetId>Svc.targetPort }}
               protocol: TCP
           livenessProbe:
             httpGet:
