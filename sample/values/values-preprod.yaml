@@ -19,10 +19,8 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-serviceAccount:
-  create: true
-  annotations: {}
-  name: ""
+serviceAccount: <parentAssetId>-<bomName>
+
 
 podAnnotations: {}
 

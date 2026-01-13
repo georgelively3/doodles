@@ -1,7 +1,7 @@
 apiVersion: cyclonedx/v1.4
 kind: BillOfMaterials
 metadata:
-  name: <assetId>
+  name: <bomName>
   version: "1.0.0"
   timestamp: "2025-07-18T00:00:00Z"
 spec:
