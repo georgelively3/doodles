@@ -300,8 +300,64 @@ sampleValuesPath="$SCRIPT_DIR/sample/values"
 if [ -d "$sampleValuesPath" ]; then
     cp -r "$sampleValuesPath"/* "$microAgPath/values/"
     
-    # Replace placeholders in values files
-    find "$microAgPath/values" -type f \( -name "*.yaml" -o -name "*.yml" \) -exec sed -i "s/<parentAssetId>/$parentAssetId/g; s/<product>/$product/g; s/<branch>/$branch/g" {} \;
+    # Process each values file to expand workload templates
+    for valuesFile in "$microAgPath/values"/*.yaml; do
+        if [ -f "$valuesFile" ]; then
+            echo "Processing $(basename "$valuesFile")..."
+            
+            # Create a temporary file
+            tmpFile="${valuesFile}.tmp"
+            
+            # Extract the template block
+            templateStart=$(grep -n "# workload service values template" "$valuesFile" | cut -d: -f1)
+            templateEnd=$(grep -n "# end of workload service values template" "$valuesFile" | cut -d: -f1)
+            
+            if [ -n "$templateStart" ] && [ -n "$templateEnd" ]; then
+                # Get content before template
+                head -n $((templateStart - 1)) "$valuesFile" > "$tmpFile"
+                
+                # Add the template start comment
+                echo "# workload service values template" >> "$tmpFile"
+                echo "#####################################################################" >> "$tmpFile"
+                
+                # Extract template content (between the comment markers, excluding the markers themselves)
+                templateContent=$(sed -n "$((templateStart + 2)),$((templateEnd - 2))p" "$valuesFile")
+                
+                # Generate a block for each workload
+                targetPort=8081
+                for i in "${!assetIds[@]}"; do
+                    assetId="${assetIds[$i]}"
+                    repo="${repositories[$i]}"
+                    imageName="$repo"
+                    
+                    # Replace placeholders in template and append
+                    echo "$templateContent" | sed "s/<assetId>/$assetId/g; s/<imageName>/$imageName/g; s/<targetPort>/$targetPort/g" >> "$tmpFile"
+                    
+                    # Add separator between workloads (except after last one)
+                    if [ $i -lt $((${#assetIds[@]} - 1)) ]; then
+                        echo "" >> "$tmpFile"
+                    fi
+                    
+                    ((targetPort++))
+                done
+                
+                # Add the template end comment
+                echo "#####################################################################" >> "$tmpFile"
+                echo "# end of workload service values template" >> "$tmpFile"
+                
+                # Get content after template
+                tail -n +$((templateEnd + 1)) "$valuesFile" >> "$tmpFile"
+                
+                # Replace original file with processed file
+                mv "$tmpFile" "$valuesFile"
+            else
+                echo "  Warning: Template markers not found in $(basename "$valuesFile")"
+            fi
+            
+            # Replace other placeholders in values files
+            sed -i "s/<parentAssetId>/$parentAssetId/g; s/<product>/$product/g; s/<branch>/$branch/g" "$valuesFile"
+        fi
+    done
     
     echo "Created values files: $(ls "$microAgPath/values")"
 else
