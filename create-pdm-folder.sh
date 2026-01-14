@@ -18,36 +18,6 @@ organization="$6"
 # Get the script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Create organization directory
-orgPath="$SCRIPT_DIR/$organization"
-if [ ! -d "$orgPath" ]; then
-    mkdir -p "$orgPath"
-    echo "Created organization directory: $orgPath"
-else
-    echo "Using existing organization directory: $orgPath"
-fi
-
-# Create repository directory
-repoPath="$orgPath/$repository"
-if [ -d "$repoPath" ]; then
-    echo "Warning: Repository directory already exists: $repoPath"
-    read -p "Do you want to overwrite it? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Aborting..."
-        exit 1
-    fi
-    rm -rf "$repoPath"
-fi
-
-mkdir -p "$repoPath"
-echo "Created repository directory: $repoPath"
-
-# Copy sample contents to the new repository directory
-samplePath="$SCRIPT_DIR/sample"
-if [ ! -d "$samplePath" ]; then
-    echo "Error: Sample directory not found at: $samplePath"
-
 # Create pdm directory
 pdmPath="$SCRIPT_DIR/pdm"
 if [ ! -d "$pdmPath" ]; then
@@ -58,27 +28,31 @@ else
 fi
 
 # Create images file
-echo "$imageName" > "$pdmPath/images"
+echo -n "$imageName" > "$pdmPath/images"
+echo "" >> "$pdmPath/images"
 echo "Created file: $pdmPath/images"
 
 # Create containers file
-echo "$imageName" > "$pdmPath/containers"
+echo -n "$imageName" > "$pdmPath/containers"
+echo "" >> "$pdmPath/containers"
 echo "Created file: $pdmPath/containers"
 
 # Create test_engine file
-echo "$testEngine" > "$pdmPath/test_engine"
+echo -n "$testEngine" > "$pdmPath/test_engine"
+echo "" >> "$pdmPath/test_engine"
 echo "Created file: $pdmPath/test_engine"
 
 # Create run_<imageName> file
 runFileName="run_$imageName"
 cat > "$pdmPath/$runFileName" << EOF
 -p 8080:8080
-$repository\${PREFX}\$$imageName:latest
+\$PDMREPO/\${PREFX}\$$imageName:latest
 EOF
 echo "Created file: $pdmPath/$runFileName"
 
 # Create mag file
-echo "$organization~$bomName" > "$pdmPath/mag"
+echo -n "$organization~$bomName" > "$pdmPath/mag"
+echo "" >> "$pdmPath/mag"
 echo "Created file: $pdmPath/mag"
 
 echo ""
