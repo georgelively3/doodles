@@ -55,8 +55,8 @@ spec:
       setString:
         - <assetId>Svc.ImageTag=$CONTAINER_IMAGE_TAG
     helm:
-      chartName: sample-application
-      chartPath: <organization>/<repository>/helm
-      chartVersion: "1.0.0"
-      valuesPath: <organization>/<repository>/values/values-$ENV.yaml
+      chartRepoUrl: pdm-ba0270-ops
+      chartPath: <organization>/<bomName>/helm
+      chartVersion: 1.0.1
+      valuesPath: <organization>/<bomName>/values/values-$ENV.yaml
       revision: <branch>

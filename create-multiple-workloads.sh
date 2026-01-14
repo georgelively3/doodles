@@ -354,9 +354,15 @@ if [ -d "$sampleValuesPath" ]; then
             fi
             
             # Replace global placeholders in values files (organization, bomName, parentAssetId, branch)
-            # Note: <assetId>, <repository>, <imageName>, <targetPort> are workload-specific and 
-            # should only appear in the template block which is already processed above
             sed -i "s/<organization>/$organization/g; s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<product>/$product/g; s/<branch>/$branch/g" "$valuesFile"
+            
+            # Replace any remaining workload-specific placeholders that appear outside template blocks
+            # Use first workload as default for any remaining placeholders (edge case handling)
+            if [ ${#assetIds[@]} -gt 0 ]; then
+                firstAssetId="${assetIds[0]}"
+                firstRepo="${repositories[0]}"
+                sed -i "s/<assetId>/$firstAssetId/g; s/<repository>/$firstRepo/g; s/<imageName>/$firstRepo/g; s/<targetPort>/8081/g" "$valuesFile"
+            fi
         fi
     done
     
