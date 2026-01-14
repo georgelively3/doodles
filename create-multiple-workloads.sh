@@ -3,7 +3,7 @@
 # Check if at least 3 arguments are provided (branch + bomName + at least one git URL)
 if [ $# -lt 3 ]; then
     echo "Usage: $0 <branch> <bomName> <git-url1> [git-url2] [git-url3] ..."
-    echo "Example: $0 develop pdmexp https://bitbucket.com/scm/george/raj_ab1234_cd3456.git https://bitbucket.com/scm/george/raj_ab1234_ef7890.git"
+    echo "Example: $0 develop pdmexp https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_cd3456.git https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_ef7890.git"
     echo "Note: bomName must be 6 alphanumeric characters or less"
     exit 1
 fi
@@ -42,12 +42,12 @@ for gitUrl in "$@"; do
     echo "Parsing repository $counter: $gitUrl"
     
     # Extract organization and repository name from Bitbucket URL
-    if [[ "$gitUrl" =~ https://bitbucket\.com/scm/([^/]+)/([^/]+)\.git$ ]]; then
+    if [[ "$gitUrl" =~ https://bitbkt\.mdtc\.itp01\.p\.fhlmc\.com/scm/([^/]+)/([^/]+)\.git$ ]]; then
         org="${BASH_REMATCH[1]}"
         repo="${BASH_REMATCH[2]}"
     else
         echo "Error: Invalid Bitbucket URL format: $gitUrl"
-        echo "Expected format: https://bitbucket.com/scm/organization/repository.git"
+        echo "Expected format: https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/organization/repository.git"
         exit 1
     fi
     
@@ -127,7 +127,7 @@ echo "Created MicroAG directory: $microAgPath"
 # Copy entire sample directory structure as a base
 echo ""
 echo "Copying sample structure..."
-samplePath="$SCRIPT_DIR/sample"
+samplePath="$SCRIPT_DIR/pdmex/pdm_pdmex_poc048_baseline_nodb"
 if [ ! -d "$samplePath" ]; then
     echo "Error: Sample directory not found at: $samplePath"
     exit 1
@@ -315,7 +315,7 @@ done
 # Copy values files from sample
 echo ""
 echo "Creating values files..."
-sampleValuesPath="$SCRIPT_DIR/sample/values"
+sampleValuesPath="$SCRIPT_DIR/pdmex/pdm_pdmex_poc048_baseline_nodb/values"
 if [ -d "$sampleValuesPath" ]; then
     cp -r "$sampleValuesPath"/* "$microAgPath/values/"
     
@@ -383,7 +383,7 @@ fi
 # Copy target files from sample
 echo ""
 echo "Creating target configuration..."
-sampleTargetPath="$SCRIPT_DIR/sample/target"
+sampleTargetPath="$SCRIPT_DIR/pdmex/pdm_pdmex_poc048_baseline_nodb/target"
 if [ -d "$sampleTargetPath" ]; then
     cp -r "$sampleTargetPath"/* "$microAgPath/target/"
     
