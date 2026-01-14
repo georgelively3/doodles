@@ -421,22 +421,75 @@ if [ -f "$PDM_SCRIPT" ]; then
     # Make sure create-pdm-folder.sh is executable
     chmod +x "$PDM_SCRIPT"
     
+    # Create destination directory if it doesn't exist
+    destDir="/home/pdm/pdm-folder-zips"
+    if [ ! -d "$destDir" ]; then
+        mkdir -p "$destDir"
+        echo "Created destination directory: $destDir"
+    fi
+    
     # Execute for each repository
     for i in "${!assetIds[@]}"; do
-        gitUrl="${gitUrls[$i]}"
         assetId="${assetIds[$i]}"
         repo="${repositories[$i]}"
+        imageName="$repo"
         
         echo ""
         echo "[$((i+1))/${#assetIds[@]}] Creating PDM folder for $repo..."
         echo "----------------------------------------"
         
-        # Call create-pdm-folder.sh with the git URL and branch
-        if bash "$PDM_SCRIPT" "$gitUrl" "$branch"; then
-            echo "✅ PDM folder created successfully for $repo"
-        else
-            echo "❌ Failed to create PDM folder for $repo"
+        # Create helm directory for this workload if it doesn't exist
+        helmWorkloadPath="$microAgPath/helm-$assetId"
+        if [ ! -d "$helmWorkloadPath" ]; then
+            echo "Warning: helm-$assetId directory not found at $helmWorkloadPath"
+            continue
         fi
+        
+        # Copy create-pdm-folder.sh to the helm workload directory
+        cp "$PDM_SCRIPT" "$helmWorkloadPath/"
+        
+        # Navigate to the helm workload directory
+        cd "$helmWorkloadPath"
+        
+        # Call create-pdm-folder.sh with mapped parameters
+        # productName=product, imageName=imageName, testEngine=cucumber, fabId=repository
+        if ./"create-pdm-folder.sh" "product" "$imageName" "cucumber" "$repo"; then
+            echo "✅ PDM structure created successfully for $repo"
+            
+            # Create zip file
+            if [ -d "pdm" ]; then
+                zipFileName="${repo}-pdm.zip"
+                echo "Creating zip file: $zipFileName"
+                
+                if zip -r "$zipFileName" pdm/; then
+                    echo "✅ Created zip file: $zipFileName"
+                    
+                    # Move zip file to destination directory
+                    if mv "$zipFileName" "$destDir/"; then
+                        echo "✅ Moved zip file to: $destDir/$zipFileName"
+                    else
+                        echo "❌ Failed to move zip file to: $destDir"
+                    fi
+                    
+                    # Delete the pdm folder
+                    echo "Cleaning up pdm folder..."
+                    rm -rf pdm/
+                    echo "✅ PDM folder deleted"
+                else
+                    echo "❌ Failed to create zip file"
+                fi
+            else
+                echo "❌ PDM folder not found, skipping zip creation"
+            fi
+        else
+            echo "❌ Failed to create PDM structure for $repo"
+        fi
+        
+        # Clean up the copied script
+        rm -f "create-pdm-folder.sh"
+        
+        # Return to script directory
+        cd "$SCRIPT_DIR"
     done
     
     echo ""
