@@ -1,0 +1,62 @@
+apiVersion: cyclonedx/v1.4
+kind: BillOfMaterials
+metadata:
+  name: <bomName>
+  version: "1.0.0"
+  timestamp: "2025-07-18T00:00:00Z"
+spec:
+  supportGroupId: <parentAssetId>
+  financeAppId: <parentAssetId>
+  bomFormat: CycloneDX
+  specVersion: "1.4"
+  serialNumber: "urn:uuid:3e671687-395b-41f5-a30f-a58921a69b79"
+  version: 1
+  metadata:
+    timestamp: "2025-07-18T00:00:00Z"
+    tools:
+      - vendor: "Example Corp"
+        name: "BOM Generator"
+        version: "1.0.0"
+    component:
+      type: application
+      name: sample-application
+      version: "1.0.0"
+      description: "Sample application for demonstration"
+  components:
+    - type: library
+      name: spring-boot-starter-web
+      version: "3.1.0"
+      scope: required
+      purl: "pkg:maven/org.springframework.boot/spring-boot-starter-web@3.1.0"
+    - type: library
+      name: spring-boot-starter-actuator
+      version: "3.1.0"
+      scope: required
+      purl: "pkg:maven/org.springframework.boot/spring-boot-starter-actuator@3.1.0"
+    - type: library
+      name: junit-jupiter
+      version: "5.9.0"
+      scope: test
+      purl: "pkg:maven/org.junit.jupiter/junit-jupiter@5.9.0"
+  workloadList:
+  -name: common
+    kind: helm
+    workloadVersion: 'v1.0.1'
+    deployFirst: true
+    helm:
+      chartRepoUrl: pdm-ba0270-ops
+      chartPath: <organization>/<bomName>/common
+      chartVersion: "1.0.0"
+      valuesPath: <organization>/<bomName>/values/values-$ENV.yaml
+      revision: <branch>
+  - name: helm-<assetId>
+    kind: helm
+    options:
+      setString:
+        - <assetId>Svc.ImageTag=$CONTAINER_IMAGE_TAG
+    helm:
+      chartName: sample-application
+      chartPath: <organization>/<repository>/helm
+      chartVersion: "1.0.0"
+      valuesPath: <organization>/<repository>/values/values-$ENV.yaml
+      revision: <branch>

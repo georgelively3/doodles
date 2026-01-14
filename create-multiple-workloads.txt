@@ -452,8 +452,8 @@ if [ -f "$PDM_SCRIPT" ]; then
         cd "$helmWorkloadPath"
         
         # Call create-pdm-folder.sh with mapped parameters
-        # productName=product, imageName=imageName, testEngine=cucumber, fabId=repository
-        if ./"create-pdm-folder.sh" "product" "$imageName" "cucumber" "$repo"; then
+        # productName, imageName, testEngine, repository, bomName, organization
+        if ./"create-pdm-folder.sh" "product" "$imageName" "cucumber" "$repo" "$bomName" "$organization"; then
             echo "✅ PDM structure created successfully for $repo"
             
             # Create zip file
