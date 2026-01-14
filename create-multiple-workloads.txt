@@ -212,81 +212,66 @@ done
 
 echo "Created mag.yaml with common + ${#assetIds[@]} workload entries"
 
-# Create bom.yaml file
+# Process bom.yaml file from template
 echo ""
 echo "Creating bom.yaml..."
 bomYamlPath="$microAgPath/bom/bom.yaml"
 
-cat > "$bomYamlPath" << EOF
-apiVersion: cyclonedx/v1.4
-kind: BillOfMaterials
-metadata:
-  name: $bomName
-  version: "1.0.0"
-  timestamp: "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-spec:
-  supportGroupId: $parentAssetId
-  financeAppId: $parentAssetId
-  bomFormat: CycloneDX
-  specVersion: "1.4"
-  serialNumber: "urn:uuid:$(uuidgen 2>/dev/null || echo "00000000-0000-0000-0000-000000000000")"
-  version: 1
-  metadata:
-    timestamp: "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    tools:
-      - vendor: "Example Corp"
-        name: "BOM Generator"
-        version: "1.0.0"
-    component:
-      type: application
-      name: $organization-$parentAssetId
-      version: "1.0.0"
-      description: "MicroAG application for $organization"
-  components:
-    - type: library
-      name: spring-boot-starter-web
-      version: "3.1.0"
-      scope: required
-      purl: "pkg:maven/org.springframework.boot/spring-boot-starter-web@3.1.0"
-    - type: library
-      name: spring-boot-starter-actuator
-      version: "3.1.0"
-      scope: required
-      purl: "pkg:maven/org.springframework.boot/spring-boot-starter-actuator@3.1.0"
-  workloadList:
-  - name: common
-    kind: helm
-    workloadVersion: 'v1.0.1'
-    deployFirst: true
-    helm:
-      chartRepoUrl: pdm-ba0270-ops
-      chartPath: $organization/$bomName/common
-      chartVersion: "1.0.0"
-      valuesPath: $organization/$bomName/values/values-\$ENV.yaml
-      revision: $branch
-EOF
-
-# Add each workload entry to bom.yaml (matching template format)
-for i in "${!assetIds[@]}"; do
-    assetId="${assetIds[$i]}"
-    repo="${repositories[$i]}"
+# The bom.yaml should already be copied from sample, now we need to expand the workload template
+if [ -f "$bomYamlPath" ]; then
+    # Look for the workload template marker (a line containing "- name: helm-<assetId>")
+    templateLine=$(grep -n "name: helm-<assetId>" "$bomYamlPath" | head -1 | cut -d: -f1)
     
-    cat >> "$bomYamlPath" << EOF
-  - name: helm-$assetId
-    kind: helm
-    options:
-      setString:
-        - ${assetId}Svc.ImageTag=\$CONTAINER_IMAGE_TAG
-    helm:
-      chartRepoUrl: pdm-ba0270-ops
-      chartPath: $organization/$repo/helm
-      chartVersion: 1.0.1
-      valuesPath: $organization/$repo/values/values-\$ENV.yaml
-      revision: $branch
-EOF
-done
-
-echo "Created bom.yaml with common + ${#assetIds[@]} workload entries"
+    if [ -n "$templateLine" ]; then
+        # Create a temporary file
+        tmpFile="${bomYamlPath}.tmp"
+        
+        # Get content before the workload template
+        head -n $((templateLine - 1)) "$bomYamlPath" > "$tmpFile"
+        
+        # Find the end of the template block (next workload entry or end of file)
+        # Extract from template line to end of file, then find where this template ends
+        tailContent=$(tail -n +$templateLine "$bomYamlPath")
+        
+        # Count lines in template (find next "  - name:" at same indentation level or end)
+        templateEndOffset=$(echo "$tailContent" | tail -n +2 | grep -n "^  - name:" | head -1 | cut -d: -f1)
+        
+        if [ -n "$templateEndOffset" ]; then
+            # Template ends before next workload entry
+            templateLines=$templateEndOffset
+        else
+            # Template goes to end of file
+            templateLines=$(echo "$tailContent" | wc -l)
+        fi
+        
+        # Extract the template content
+        templateContent=$(echo "$tailContent" | head -n $templateLines)
+        
+        # Generate a block for each workload
+        for i in "${!assetIds[@]}"; do
+            assetId="${assetIds[$i]}"
+            repo="${repositories[$i]}"
+            
+            # Replace placeholders in template and append
+            echo "$templateContent" | sed "s/<assetId>/$assetId/g; s/<repository>/$repo/g; s/<imageName>/$repo/g" >> "$tmpFile"
+        done
+        
+        # If there was content after the template, add it
+        if [ -n "$templateEndOffset" ]; then
+            tail -n +$((templateLine + templateLines)) "$bomYamlPath" >> "$tmpFile"
+        fi
+        
+        # Replace original file with processed file
+        mv "$tmpFile" "$bomYamlPath"
+        
+        echo "Expanded bom.yaml workload template for ${#assetIds[@]} workloads"
+    else
+        echo "Warning: No workload template marker found in bom.yaml (expected 'helm-<assetId>')"
+    fi
+else
+    echo "Error: bom.yaml not found at $bomYamlPath"
+    exit 1
+fi
 
 # Replace placeholders in configuration files (following create-project-helms.sh pattern)
 echo ""
