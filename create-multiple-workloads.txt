@@ -108,10 +108,20 @@ done
 echo ""
 
 # Create directory structure: organization/bomName/
-microAgPath="$SCRIPT_DIR/$organization/$bomName"
+orgPath="$SCRIPT_DIR/$organization"
+microAgPath="$orgPath/$bomName"
 
+# Create organization directory if it doesn't exist (no prompt)
+if [ ! -d "$orgPath" ]; then
+    mkdir -p "$orgPath"
+    echo "Created organization directory: $orgPath"
+else
+    echo "Using existing organization directory: $orgPath"
+fi
+
+# Check if bomName directory already exists
 if [ -d "$microAgPath" ]; then
-    echo "Warning: MicroAG directory already exists: $microAgPath"
+    echo "Warning: BOM directory already exists: $microAgPath"
     read -p "Do you want to overwrite it? (y/N): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -122,7 +132,7 @@ if [ -d "$microAgPath" ]; then
 fi
 
 mkdir -p "$microAgPath"
-echo "Created MicroAG directory: $microAgPath"
+echo "Created BOM directory: $microAgPath"
 
 # Copy entire sample directory structure as a base
 echo ""
