@@ -266,7 +266,7 @@ spec:
       revision: $branch
 EOF
 
-# Add each workload entry to bom.yaml (matching mag.yaml entries)
+# Add each workload entry to bom.yaml (matching template format)
 for i in "${!assetIds[@]}"; do
     assetId="${assetIds[$i]}"
     repo="${repositories[$i]}"
@@ -274,11 +274,14 @@ for i in "${!assetIds[@]}"; do
     cat >> "$bomYamlPath" << EOF
   - name: helm-$assetId
     kind: helm
+    options:
+      setString:
+        - ${assetId}Svc.ImageTag=\$CONTAINER_IMAGE_TAG
     helm:
-      chartName: $assetId-application
-      chartPath: $organization/$bomName/helm-$assetId
-      chartVersion: "1.0.0"
-      valuesPath: $organization/$bomName/values/values-\$ENV.yaml
+      chartRepoUrl: pdm-ba0270-ops
+      chartPath: $organization/$repo/helm
+      chartVersion: 1.0.1
+      valuesPath: $organization/$repo/values/values-\$ENV.yaml
       revision: $branch
 EOF
 done
