@@ -11,6 +11,8 @@ The `create-multiple-workloads.sh` script automates the creation of:
 - BOM (Bill of Materials) and MAG files
 - PDM folders for each workload repository
 
+**Script Location:** [create-multiple-workloads.sh](https://bitbkt.mdtc.itp01.p.org.com/projects/PDM/repos/pdm_ba0270_ops/browse/create-multiple-workloads.sh)
+
 ## Prerequisites
 
 - Bash shell environment (WSL, Git Bash, or Linux/Mac terminal)
