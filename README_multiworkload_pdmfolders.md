@@ -37,7 +37,7 @@ The `create-multiple-workloads.sh` script automates the creation of:
    - Example: `pdmexp`, `test01`, `app123`
 
 3. **`<git-url1>` `<git-url2>` ...** (at least one required)
-   - Bitbucket repository URLs in the format: `https://bitbucket.com/scm/<org>/<repo>.git`
+   - Bitbucket repository URLs in the format: `https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/<org>/<repo>.git`
    - All repositories must belong to the same organization and parent asset ID
    - Repository name format: `[product_]<parentAssetId>_<assetId>`
 
@@ -64,16 +64,16 @@ Examples:
 
 ```bash
 ./create-multiple-workloads.sh develop pdmexp \
-  https://bitbucket.com/scm/george/test_ab1234_cd5678.git
+  https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/test_ab1234_cd5678.git
 ```
 
 ### Multiple Workloads
 
 ```bash
 ./create-multiple-workloads.sh develop pdmexp \
-  https://bitbucket.com/scm/george/test_ab1234_cd5678.git \
-  https://bitbucket.com/scm/george/test_ab1234_ef9012.git \
-  https://bitbucket.com/scm/george/test_ab1234_gh3456.git
+  https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/test_ab1234_cd5678.git \
+  https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/test_ab1234_ef9012.git \
+  https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/test_ab1234_gh3456.git
 ```
 
 ## Generated Structure
@@ -182,24 +182,49 @@ The script replaces the following placeholders in template files:
 
 ## PDM Folder Creation
 
-After creating the MicroAG structure, the script automatically executes `create-pdm-folder.sh` for each repository to generate PDM folders.
+After creating the MicroAG structure, the script automatically executes `create-pdm-folder.sh` for each workload to generate PDM folders.
 
 ### What Gets Created
-- Individual PDM folders for each workload
-- Test configurations and resources
-- Integration with the main repository structure
+
+For each workload, a `pdm/` folder is created in the `helm-<assetId>/` directory containing:
+
+- **images**: List of container images
+- **containers**: Container names
+- **test_engine**: Test framework identifier (e.g., cucumber)
+- **run_<imageName>**: Docker run configuration with port mappings
+- **mag**: MicroAG reference in format `<organization>~<bomName>`
+
+These PDM folders are then:
+1. Zipped into `<repository>-pdm.zip`
+2. Moved to `/home/pdm/pdm-folder-zips/`
+3. Original `pdm/` directory cleaned up
+
+### create-pdm-folder.sh Arguments
+
+The script is called with 6 arguments:
+```bash
+create-pdm-folder.sh <productName> <imageName> <testEngine> <repository> <bomName> <organization>
+```
+
+Example:
+```bash
+create-pdm-folder.sh product test_ab1234_cd5678 cucumber test_ab1234_cd5678 pdmexp george
+```
 
 ## Interactive Prompts
 
 ### Overwrite Confirmation
-If the target directory already exists, you'll be prompted:
+The script handles directory creation intelligently:
+- **Organization folder**: Created automatically if it doesn't exist, or reused if it does (no prompt)
+- **BOM folder**: If it already exists, you'll be prompted:
 
 ```
-Warning: MicroAG directory already exists: /path/to/directory
+Using existing organization directory: /path/to/organization
+Warning: BOM directory already exists: /path/to/organization/bomName
 Do you want to overwrite it? (y/N):
 ```
 
-Type `y` and press Enter to overwrite, or `N` to abort.
+Type `y` and press Enter to overwrite the BOM folder, or `N` to abort. This allows teams to add multiple MicroAGs (different bomNames) under their existing organization without risk of overwriting other MicroAGs.
 
 ## Validation and Error Handling
 
@@ -221,7 +246,7 @@ The script validates:
    - Keep it 6 characters or less
 
 2. **"Invalid Bitbucket URL format"**
-   - Check URL follows: `https://bitbucket.com/scm/<org>/<repo>.git`
+   - Check URL follows: `https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/<org>/<repo>.git`
    - Ensure `.git` extension is present
 
 3. **"Repository name does not contain at least two underscore-separated parts"**
@@ -233,16 +258,20 @@ The script validates:
    - All repositories must have the same parentAssetId
 
 5. **"Sample directory not found"**
-   - Ensure the `sample/` directory exists in the same location as the script
-   - Required subdirectories: `bom/`, `common/`, `helm/`, `helm-assetId/`, `values/`, `target/`
+   - Ensure the `pdmex/pdm_pdmex_poc048_baseline_nodb/` directory exists in the same location as the script
+   - Required subdirectories: `bom/`, `common/`, `helm/`, `helm-assetId/`, `values/`, `target/`, `spam/`
 
 ## Sample Templates
 
-The script uses templates from the `sample/` directory. To customize:
+The script uses templates from the `pdmex/pdm_pdmex_poc048_baseline_nodb/` directory. To customize:
 
-1. Edit files in `sample/` to match your needs
+1. Edit files in `pdmex/pdm_pdmex_poc048_baseline_nodb/` to match your needs
 2. Use placeholders (e.g., `<bomName>`, `<assetId>`) where substitution is needed
-3. The `sample/helm-assetId/` directory is used for workload-specific helm charts
+3. The script processes templates intelligently:
+   - **bom.yaml**: Finds workload template marker (`helm-<assetId>`) and expands for each workload
+   - **values files**: Finds template block between comment markers and expands with auto-incrementing ports
+   - **Other files**: Global placeholders replaced consistently
+4. The template approach preserves your custom structure - the script only does substitution, not restructuring
 
 ## Tips and Best Practices
 
