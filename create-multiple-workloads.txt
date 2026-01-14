@@ -273,26 +273,21 @@ else
     exit 1
 fi
 
-# Replace placeholders in configuration files (following create-project-helms.sh pattern)
+# Replace placeholders in configuration files
 echo ""
 echo "Replacing placeholder values in files..."
 
-# Replace in bom directory
-find "$microAgPath/bom" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
+# Replace global placeholders in bom directory
+# Note: bom.yaml template already processed, this handles remaining global placeholders
+find "$microAgPath/bom" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<branch>/$branch/g" {} \;
 
-# Replace in values directory
-find "$microAgPath/values" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
-
-# Replace in target directory
-find "$microAgPath/target" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
-
-echo "Replaced placeholders:"
+echo "Replaced global placeholders:"
 echo "  <bomName> -> $bomName"
 echo "  <parentAssetId> -> $parentAssetId"
 echo "  <organization> -> $organization"
 echo "  <branch> -> $branch"
 echo ""
-echo "Per-workload replacements:"
+echo "Per-workload replacements (handled in template expansion):"
 for i in "${!assetIds[@]}"; do
     echo "  helm-${assetIds[$i]}:"
     echo "    <assetId> -> ${assetIds[$i]}"
@@ -358,8 +353,10 @@ if [ -d "$sampleValuesPath" ]; then
                 echo "  Warning: Template markers not found in $(basename "$valuesFile")"
             fi
             
-            # Replace other placeholders in values files
-            sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<product>/$product/g; s/<branch>/$branch/g" "$valuesFile"
+            # Replace global placeholders in values files (organization, bomName, parentAssetId, branch)
+            # Note: <assetId>, <repository>, <imageName>, <targetPort> are workload-specific and 
+            # should only appear in the template block which is already processed above
+            sed -i "s/<organization>/$organization/g; s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<product>/$product/g; s/<branch>/$branch/g" "$valuesFile"
         fi
     done
     
@@ -375,8 +372,8 @@ sampleTargetPath="$SCRIPT_DIR/pdmex/pdm_pdmex_poc048_baseline_nodb/target"
 if [ -d "$sampleTargetPath" ]; then
     cp -r "$sampleTargetPath"/* "$microAgPath/target/"
     
-    # Replace placeholders in target files
-    find "$microAgPath/target" -type f \( -name "*.json" -o -name "*.yaml" -o -name "*.yml" \) -exec sed -i "s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<product>/$product/g; s/<branch>/$branch/g" {} \;
+    # Replace global placeholders in target files
+    find "$microAgPath/target" -type f \( -name "*.json" -o -name "*.yaml" -o -name "*.yml" \) -exec sed -i "s/<organization>/$organization/g; s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<product>/$product/g; s/<branch>/$branch/g" {} \;
     
     echo "Created target files: $(ls "$microAgPath/target")"
 else
