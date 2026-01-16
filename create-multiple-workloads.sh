@@ -210,7 +210,7 @@ for i in "${!assetIds[@]}"; do
         
         if [ -f "$deploymentFile" ]; then
             # Inject annotations snippet at end of spec.template.metadata.annotations
-            annotationsSnippet="$SCRIPT_DIR/modules/postgres/deployment-annotations-snippet.yaml"
+            annotationsSnippet="$SCRIPT_DIR/pdmex/helm-snippets/postgres/deployment-annotations-snippet.yaml"
             
             if [ -f "$annotationsSnippet" ]; then
                 # Find the line with "labels:" after annotations section
@@ -236,7 +236,7 @@ for i in "${!assetIds[@]}"; do
             fi
             
             # Inject envFrom snippet at spec.template.spec.containers (before env section)
-            envFromSnippet="$SCRIPT_DIR/modules/postgres/deployment-envfrom-snippet.yaml"
+            envFromSnippet="$SCRIPT_DIR/pdmex/helm-snippets/postgres/deployment-envfrom-snippet.yaml"
             
             if [ -f "$envFromSnippet" ]; then
                 # Find the line with "env:" in containers section
@@ -361,7 +361,7 @@ if [ -f "$bomYamlPath" ]; then
         
         if [ -n "$envLine" ]; then
             # Read the database snippet from the module
-            dbSnippetPath="$SCRIPT_DIR/modules/postgres/bom-snippet.yaml"
+            dbSnippetPath="$SCRIPT_DIR/pdmex/helm-snippets/postgres/bom-snippet.yaml"
             
             if [ -f "$dbSnippetPath" ]; then
                 # Create temp file
@@ -388,7 +388,7 @@ if [ -f "$bomYamlPath" ]; then
         fi
         
         # Copy database ConfigMap to common/templates
-        dbConfigMapPath="$SCRIPT_DIR/modules/postgres/db-configmap.yaml"
+        dbConfigMapPath="$SCRIPT_DIR/pdmex/helm-snippets/postgres/db-configmap.yaml"
         commonTemplatesPath="$microAgPath/common/templates"
         
         if [ -f "$dbConfigMapPath" ]; then
@@ -498,7 +498,7 @@ if [ -d "$sampleValuesPath" ]; then
     
     # If database flag is 'y', append database snippet to all values files
     if [ "$database" == "y" ]; then
-        dbValuesSnippetPath="$SCRIPT_DIR/modules/postgres/values-db-snippet.yaml"
+        dbValuesSnippetPath="$SCRIPT_DIR/pdmex/helm-snippets/postgres/values-db-snippet.yaml"
         
         if [ -f "$dbValuesSnippetPath" ]; then
             echo "Appending database configuration to values files..."
