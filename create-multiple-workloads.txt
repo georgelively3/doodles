@@ -240,7 +240,7 @@ for i in "${!assetIds[@]}"; do
             
             if [ -f "$envFromSnippet" ]; then
                 # Find the line with "env:" in containers section
-                envLine=$(grep -n "^          env:" "$deploymentFile" | head -1 | cut -d: -f1)
+                envLine=$(grep -n "^[[:space:]]*env:" "$deploymentFile" | head -1 | cut -d: -f1)
                 
                 if [ -n "$envLine" ]; then
                     tmpFile="${deploymentFile}.tmp"
@@ -356,8 +356,39 @@ if [ -f "$bomYamlPath" ]; then
     if [ "$database" == "y" ]; then
         echo "Adding Aurora RDS database configuration to bom.yaml..."
         
-        # Find the envResources line
+        # Check if envResources line exists
         envLine=$(grep -n "envResources:" "$bomYamlPath" | head -1 | cut -d: -f1)
+        
+        if [ -z "$envLine" ]; then
+            # envResources doesn't exist, need to create it
+            # Find contextVersion line to determine insertion point and indentation
+            contextLine=$(grep -n "contextVersion:" "$bomYamlPath" | head -1 | cut -d: -f1)
+            
+            if [ -n "$contextLine" ]; then
+                # Get the indentation of contextVersion line
+                indentation=$(sed -n "${contextLine}p" "$bomYamlPath" | sed 's/\(^[[:space:]]*\).*/\1/')
+                
+                tmpFile="${bomYamlPath}.tmp"
+                
+                # Get content up to and including contextVersion line
+                head -n "$contextLine" "$bomYamlPath" > "$tmpFile"
+                
+                # Add envResources line with same indentation as contextVersion
+                echo "${indentation}envResources:" >> "$tmpFile"
+                
+                # Add rest of file after contextVersion line
+                tail -n +$((contextLine + 1)) "$bomYamlPath" >> "$tmpFile"
+                
+                mv "$tmpFile" "$bomYamlPath"
+                
+                echo "Created envResources section in bom.yaml"
+                
+                # Update envLine for next step
+                envLine=$(grep -n "envResources:" "$bomYamlPath" | head -1 | cut -d: -f1)
+            else
+                echo "Warning: contextVersion line not found in bom.yaml, cannot create envResources"
+            fi
+        fi
         
         if [ -n "$envLine" ]; then
             # Read the database snippet from the module
@@ -384,7 +415,7 @@ if [ -f "$bomYamlPath" ]; then
                 echo "Warning: Database snippet not found at $dbSnippetPath"
             fi
         else
-            echo "Warning: envResources line not found in bom.yaml"
+            echo "Warning: Could not find or create envResources line in bom.yaml"
         fi
         
         # Copy database ConfigMap to common/templates
