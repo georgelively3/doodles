@@ -1,0 +1,15 @@
+# Database
+PG:
+  R1:
+    ClusterEndpoint: georgerds.cluster-xxxxxxxxxxxx.us-east-1.rds.amazonaws.com
+    DbName: mydatabase
+    AppCredsPath: /secrets/db-credentials/app-creds.json
+    DdlCredsPath: /secrets/db-credentials/ddl-creds.json
+  R2:
+    ClusterEndpoint: georgerds.cluster-xxxxxxxxxxxx.us-east-1.rds.amazonaws.com
+    DbName: mydatabase
+    AppCredsPath: /secrets/db-credentials/app-creds.json
+    DdlCredsPath: /secrets/db-credentials/ddl-creds.json
+  DbPort: 5435
+  DdlMgrSecretsFileName: db-credentials
+  AppCrudSecretsFileName: db-credentials

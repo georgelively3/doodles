@@ -1,10 +1,11 @@
 #!/bin/bash
 
-# Check if at least 3 arguments are provided (branch + bomName + at least one git URL)
-if [ $# -lt 3 ]; then
-    echo "Usage: $0 <branch> <bomName> <git-url1> [git-url2] [git-url3] ..."
-    echo "Example: $0 develop pdmexp https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_cd3456.git https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_ef7890.git"
+# Check if at least 4 arguments are provided (branch + bomName + database flag + at least one git URL)
+if [ $# -lt 4 ]; then
+    echo "Usage: $0 <branch> <bomName> <database> <git-url1> [git-url2] [git-url3] ..."
+    echo "Example: $0 develop pdmexp y https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_cd3456.git https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_ef7890.git"
     echo "Note: bomName must be 6 alphanumeric characters or less"
+    echo "Note: database must be 'y' or 'n' (creates Aurora RDS configuration)"
     exit 1
 fi
 
@@ -24,6 +25,19 @@ if [[ ! "$bomName" =~ ^[a-zA-Z0-9]{1,6}$ ]]; then
     echo "Error: bomName must be 1-6 alphanumeric characters. Got: '$bomName'"
     exit 1
 fi
+
+# Assign database flag from third argument and validate
+database="$1"
+shift  # Remove the third argument (database) from the argument list
+
+# Validate database flag
+if [[ ! "$database" =~ ^[yYnN]$ ]]; then
+    echo "Error: database must be 'y' or 'n'. Got: '$database'"
+    exit 1
+fi
+
+# Normalize to lowercase
+database="${database,,}"
 
 # Arrays to store parsed information from all git URLs
 declare -a assetIds
@@ -189,6 +203,65 @@ for i in "${!assetIds[@]}"; do
     imageName="$repo"
     
     find "$helmDir" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$assetId/g; s/<organization>/$organization/g; s/<repository>/$repo/g; s/<imageName>/$imageName/g; s/<branch>/$branch/g" {} \;
+    
+    # If database flag is 'y', inject database snippets into deployment.yaml
+    if [ "$database" == "y" ]; then
+        deploymentFile="$helmDir/templates/deployment.yaml"
+        
+        if [ -f "$deploymentFile" ]; then
+            # Inject annotations snippet at end of spec.template.metadata.annotations
+            annotationsSnippet="$SCRIPT_DIR/modules/postgres/deployment-annotations-snippet.yaml"
+            
+            if [ -f "$annotationsSnippet" ]; then
+                # Find the line with "labels:" after annotations section
+                labelsLine=$(grep -n "^      labels:" "$deploymentFile" | head -1 | cut -d: -f1)
+                
+                if [ -n "$labelsLine" ]; then
+                    tmpFile="${deploymentFile}.tmp"
+                    
+                    # Get content before labels line
+                    head -n $((labelsLine - 1)) "$deploymentFile" > "$tmpFile"
+                    
+                    # Append annotations snippet with proper indentation (8 spaces)
+                    sed 's/^/        /' "$annotationsSnippet" >> "$tmpFile"
+                    
+                    # Add newline before labels
+                    echo "" >> "$tmpFile"
+                    
+                    # Append rest of file from labels line
+                    tail -n +$labelsLine "$deploymentFile" >> "$tmpFile"
+                    
+                    mv "$tmpFile" "$deploymentFile"
+                fi
+            fi
+            
+            # Inject envFrom snippet at spec.template.spec.containers (before env section)
+            envFromSnippet="$SCRIPT_DIR/modules/postgres/deployment-envfrom-snippet.yaml"
+            
+            if [ -f "$envFromSnippet" ]; then
+                # Find the line with "env:" in containers section
+                envLine=$(grep -n "^          env:" "$deploymentFile" | head -1 | cut -d: -f1)
+                
+                if [ -n "$envLine" ]; then
+                    tmpFile="${deploymentFile}.tmp"
+                    
+                    # Get content before env line
+                    head -n $((envLine - 1)) "$deploymentFile" > "$tmpFile"
+                    
+                    # Append envFrom snippet with correct indentation (10 spaces)
+                    sed 's/^/          /' "$envFromSnippet" >> "$tmpFile"
+                    
+                    # Add newline before env
+                    echo "" >> "$tmpFile"
+                    
+                    # Append rest of file from env line
+                    tail -n +$envLine "$deploymentFile" >> "$tmpFile"
+                    
+                    mv "$tmpFile" "$deploymentFile"
+                fi
+            fi
+        fi
+    fi
 done
 
 # Create mag.yaml file
@@ -277,6 +350,53 @@ if [ -f "$bomYamlPath" ]; then
         echo "Expanded bom.yaml workload template for ${#assetIds[@]} workloads"
     else
         echo "Warning: No workload template marker found in bom.yaml (expected 'helm-<assetId>')"
+    fi
+    
+    # If database flag is 'y', inject database configuration from module
+    if [ "$database" == "y" ]; then
+        echo "Adding Aurora RDS database configuration to bom.yaml..."
+        
+        # Find the envResources line
+        envLine=$(grep -n "envResources:" "$bomYamlPath" | head -1 | cut -d: -f1)
+        
+        if [ -n "$envLine" ]; then
+            # Read the database snippet from the module
+            dbSnippetPath="$SCRIPT_DIR/modules/postgres/bom-snippet.yaml"
+            
+            if [ -f "$dbSnippetPath" ]; then
+                # Create temp file
+                tmpFile="${bomYamlPath}.tmp"
+                
+                # Get content before insertion point (envResources line)
+                head -n "$envLine" "$bomYamlPath" > "$tmpFile"
+                
+                # Inject snippet once with bomName substitution
+                sed "s/<bomName>/$bomName/g" "$dbSnippetPath" >> "$tmpFile"
+                
+                # Add rest of file after envResources line
+                tail -n +$((envLine + 1)) "$bomYamlPath" >> "$tmpFile"
+                
+                # Replace original
+                mv "$tmpFile" "$bomYamlPath"
+                
+                echo "Added Aurora RDS configuration for bomName: $bomName"
+            else
+                echo "Warning: Database snippet not found at $dbSnippetPath"
+            fi
+        else
+            echo "Warning: envResources line not found in bom.yaml"
+        fi
+        
+        # Copy database ConfigMap to common/templates
+        dbConfigMapPath="$SCRIPT_DIR/modules/postgres/db-configmap.yaml"
+        commonTemplatesPath="$microAgPath/common/templates"
+        
+        if [ -f "$dbConfigMapPath" ]; then
+            cp "$dbConfigMapPath" "$commonTemplatesPath/"
+            echo "Copied db-configmap.yaml to common/templates/"
+        else
+            echo "Warning: db-configmap.yaml not found at $dbConfigMapPath"
+        fi
     fi
 else
     echo "Error: bom.yaml not found at $bomYamlPath"
@@ -375,6 +495,25 @@ if [ -d "$sampleValuesPath" ]; then
             fi
         fi
     done
+    
+    # If database flag is 'y', append database snippet to all values files
+    if [ "$database" == "y" ]; then
+        dbValuesSnippetPath="$SCRIPT_DIR/modules/postgres/values-db-snippet.yaml"
+        
+        if [ -f "$dbValuesSnippetPath" ]; then
+            echo "Appending database configuration to values files..."
+            
+            for valuesFile in "$microAgPath/values"/*.yaml; do
+                if [ -f "$valuesFile" ]; then
+                    # Append the snippet to the end of the file
+                    cat "$dbValuesSnippetPath" >> "$valuesFile"
+                    echo "  Appended to $(basename "$valuesFile")"
+                fi
+            done
+        else
+            echo "Warning: values-db-snippet.yaml not found at $dbValuesSnippetPath"
+        fi
+    fi
     
     echo "Created values files: $(ls "$microAgPath/values")"
 else

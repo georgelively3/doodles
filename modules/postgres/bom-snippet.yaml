@@ -1,0 +1,6 @@
+    -name: <bomName>rds
+      kind: auroraRds
+      auroraRdsMachineSize: MINI
+      auroraDbPort: 5435
+      auroraDbVersion: '15.9'
+

@@ -1,0 +1,3 @@
+{{- if eq .Values.AwsRegion .Values.AwsRegion1 }}
+vault.hashicorp.com/agent-inject: "true"
+{{- end}}

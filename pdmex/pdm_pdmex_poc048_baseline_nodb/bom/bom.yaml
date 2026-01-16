@@ -11,6 +11,9 @@ spec:
   specVersion: "1.4"
   serialNumber: "urn:uuid:3e671687-395b-41f5-a30f-a58921a69b79"
   version: 1
+  operatingContext:
+    contextVersion: 'v1.0.1'
+    envResources:
   metadata:
     timestamp: "2025-07-18T00:00:00Z"
     tools:
