@@ -253,25 +253,45 @@ for i in "${!assetIds[@]}"; do
             envFromSnippet="$SCRIPT_DIR/pdmex/helm-snippets/postgres/deployment-envfrom-snippet.yaml"
             
             if [ -f "$envFromSnippet" ]; then
-                # Find the line with "env:" in containers section
-                envLine=$(grep -n "^[[:space:]]*env:" "$deploymentFile" | head -1 | cut -d: -f1)
+                # Check if envFrom already exists in the file
+                existingEnvFrom=$(grep -n "^[[:space:]]*envFrom:" "$deploymentFile" | head -1 | cut -d: -f1)
                 
-                if [ -n "$envLine" ]; then
+                if [ -n "$existingEnvFrom" ]; then
+                    # envFrom already exists, append the configMapRef under it
                     tmpFile="${deploymentFile}.tmp"
                     
-                    # Get content before env line
-                    head -n $((envLine - 1)) "$deploymentFile" > "$tmpFile"
+                    # Get content up to and including the envFrom line
+                    head -n "$existingEnvFrom" "$deploymentFile" > "$tmpFile"
                     
-                    # Append envFrom snippet with correct indentation (10 spaces)
-                    sed 's/^/          /' "$envFromSnippet" >> "$tmpFile"
+                    # Append just the configMapRef part (skip the envFrom: header line)
+                    tail -n +2 "$envFromSnippet" | sed 's/^/          /' >> "$tmpFile"
                     
-                    # Add newline before env
-                    echo "" >> "$tmpFile"
-                    
-                    # Append rest of file from env line
-                    tail -n +$envLine "$deploymentFile" >> "$tmpFile"
+                    # Add rest of file after envFrom line
+                    tail -n +$((existingEnvFrom + 1)) "$deploymentFile" >> "$tmpFile"
                     
                     mv "$tmpFile" "$deploymentFile"
+                else
+                    # No envFrom exists, inject the full snippet
+                    # Find the line with "env:" in containers section
+                    envLine=$(grep -n "^[[:space:]]*env:" "$deploymentFile" | head -1 | cut -d: -f1)
+                    
+                    if [ -n "$envLine" ]; then
+                        tmpFile="${deploymentFile}.tmp"
+                        
+                        # Get content before env line
+                        head -n $((envLine - 1)) "$deploymentFile" > "$tmpFile"
+                        
+                        # Append envFrom snippet with correct indentation (10 spaces)
+                        sed 's/^/          /' "$envFromSnippet" >> "$tmpFile"
+                        
+                        # Add newline before env
+                        echo "" >> "$tmpFile"
+                        
+                        # Append rest of file from env line
+                        tail -n +$envLine "$deploymentFile" >> "$tmpFile"
+                        
+                        mv "$tmpFile" "$deploymentFile"
+                    fi
                 fi
             fi
         fi
@@ -286,25 +306,45 @@ for i in "${!assetIds[@]}"; do
             s3EnvFromSnippet="$SCRIPT_DIR/pdmex/helm-snippets/s3/deployment-envfrom-snippet.yaml"
             
             if [ -f "$s3EnvFromSnippet" ]; then
-                # Find the line with "env:" in containers section
-                envLine=$(grep -n "^[[:space:]]*env:" "$deploymentFile" | head -1 | cut -d: -f1)
+                # Check if envFrom already exists in the file
+                existingEnvFrom=$(grep -n "^[[:space:]]*envFrom:" "$deploymentFile" | head -1 | cut -d: -f1)
                 
-                if [ -n "$envLine" ]; then
+                if [ -n "$existingEnvFrom" ]; then
+                    # envFrom already exists, append the configMapRef under it
                     tmpFile="${deploymentFile}.tmp"
                     
-                    # Get content before env line
-                    head -n $((envLine - 1)) "$deploymentFile" > "$tmpFile"
+                    # Get content up to and including the envFrom line
+                    head -n "$existingEnvFrom" "$deploymentFile" > "$tmpFile"
                     
-                    # Append envFrom snippet with correct indentation (10 spaces)
-                    sed 's/^/          /' "$s3EnvFromSnippet" >> "$tmpFile"
+                    # Append just the configMapRef part (skip the envFrom: header line)
+                    tail -n +2 "$s3EnvFromSnippet" | sed 's/^/          /' >> "$tmpFile"
                     
-                    # Add newline before env
-                    echo "" >> "$tmpFile"
-                    
-                    # Append rest of file from env line
-                    tail -n +$envLine "$deploymentFile" >> "$tmpFile"
+                    # Add rest of file after envFrom line
+                    tail -n +$((existingEnvFrom + 1)) "$deploymentFile" >> "$tmpFile"
                     
                     mv "$tmpFile" "$deploymentFile"
+                else
+                    # No envFrom exists, inject the full snippet
+                    # Find the line with "env:" in containers section
+                    envLine=$(grep -n "^[[:space:]]*env:" "$deploymentFile" | head -1 | cut -d: -f1)
+                    
+                    if [ -n "$envLine" ]; then
+                        tmpFile="${deploymentFile}.tmp"
+                        
+                        # Get content before env line
+                        head -n $((envLine - 1)) "$deploymentFile" > "$tmpFile"
+                        
+                        # Append envFrom snippet with correct indentation (10 spaces)
+                        sed 's/^/          /' "$s3EnvFromSnippet" >> "$tmpFile"
+                        
+                        # Add newline before env
+                        echo "" >> "$tmpFile"
+                        
+                        # Append rest of file from env line
+                        tail -n +$envLine "$deploymentFile" >> "$tmpFile"
+                        
+                        mv "$tmpFile" "$deploymentFile"
+                    fi
                 fi
             fi
         fi
