@@ -1,11 +1,12 @@
 #!/bin/bash
 
-# Check if at least 4 arguments are provided (branch + bomName + database flag + at least one git URL)
-if [ $# -lt 4 ]; then
-    echo "Usage: $0 <branch> <bomName> <database> <git-url1> [git-url2] [git-url3] ..."
-    echo "Example: $0 develop pdmexp y https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_cd3456.git https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_ef7890.git"
+# Check if at least 5 arguments are provided (branch + bomName + database flag + s3 flag + at least one git URL)
+if [ $# -lt 5 ]; then
+    echo "Usage: $0 <branch> <bomName> <database> <s3> <git-url1> [git-url2] [git-url3] ..."
+    echo "Example: $0 develop pdmexp y n https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_cd3456.git https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_ef7890.git"
     echo "Note: bomName must be 6 alphanumeric characters or less"
     echo "Note: database must be 'y' or 'n' (creates Aurora RDS configuration)"
+    echo "Note: s3 must be 'y' or 'n' (creates S3 bucket configuration)"
     exit 1
 fi
 
@@ -38,6 +39,19 @@ fi
 
 # Normalize to lowercase
 database="${database,,}"
+
+# Assign s3 flag from fourth argument and validate
+s3="$1"
+shift  # Remove the fourth argument (s3) from the argument list
+
+# Validate s3 flag
+if [[ ! "$s3" =~ ^[yYnN]$ ]]; then
+    echo "Error: s3 must be 'y' or 'n'. Got: '$s3'"
+    exit 1
+fi
+
+# Normalize to lowercase
+s3="${s3,,}"
 
 # Arrays to store parsed information from all git URLs
 declare -a assetIds
@@ -262,6 +276,39 @@ for i in "${!assetIds[@]}"; do
             fi
         fi
     fi
+    
+    # If s3 flag is 'y', inject S3 snippets into deployment.yaml
+    if [ "$s3" == "y" ]; then
+        deploymentFile="$helmDir/templates/deployment.yaml"
+        
+        if [ -f "$deploymentFile" ]; then
+            # Inject envFrom snippet at spec.template.spec.containers (before env section)
+            s3EnvFromSnippet="$SCRIPT_DIR/pdmex/helm-snippets/s3/deployment-envfrom-snippet.yaml"
+            
+            if [ -f "$s3EnvFromSnippet" ]; then
+                # Find the line with "env:" in containers section
+                envLine=$(grep -n "^[[:space:]]*env:" "$deploymentFile" | head -1 | cut -d: -f1)
+                
+                if [ -n "$envLine" ]; then
+                    tmpFile="${deploymentFile}.tmp"
+                    
+                    # Get content before env line
+                    head -n $((envLine - 1)) "$deploymentFile" > "$tmpFile"
+                    
+                    # Append envFrom snippet with correct indentation (10 spaces)
+                    sed 's/^/          /' "$s3EnvFromSnippet" >> "$tmpFile"
+                    
+                    # Add newline before env
+                    echo "" >> "$tmpFile"
+                    
+                    # Append rest of file from env line
+                    tail -n +$envLine "$deploymentFile" >> "$tmpFile"
+                    
+                    mv "$tmpFile" "$deploymentFile"
+                fi
+            fi
+        fi
+    fi
 done
 
 # Create mag.yaml file
@@ -427,6 +474,84 @@ if [ -f "$bomYamlPath" ]; then
             echo "Copied db-configmap.yaml to common/templates/"
         else
             echo "Warning: db-configmap.yaml not found at $dbConfigMapPath"
+        fi
+    fi
+    
+    # If s3 flag is 'y', inject S3 configuration from module
+    if [ "$s3" == "y" ]; then
+        echo "Adding S3 bucket configuration to bom.yaml..."
+        
+        # Check if envResources line exists
+        envLine=$(grep -n "envResources:" "$bomYamlPath" | head -1 | cut -d: -f1)
+        
+        if [ -z "$envLine" ]; then
+            # envResources doesn't exist, need to create it
+            # Find contextVersion line to determine insertion point and indentation
+            contextLine=$(grep -n "contextVersion:" "$bomYamlPath" | head -1 | cut -d: -f1)
+            
+            if [ -n "$contextLine" ]; then
+                # Get the indentation of contextVersion line
+                indentation=$(sed -n "${contextLine}p" "$bomYamlPath" | sed 's/\(^[[:space:]]*\).*/\1/')
+                
+                tmpFile="${bomYamlPath}.tmp"
+                
+                # Get content up to and including contextVersion line
+                head -n "$contextLine" "$bomYamlPath" > "$tmpFile"
+                
+                # Add envResources line with same indentation as contextVersion
+                echo "${indentation}envResources:" >> "$tmpFile"
+                
+                # Add rest of file after contextVersion line
+                tail -n +$((contextLine + 1)) "$bomYamlPath" >> "$tmpFile"
+                
+                mv "$tmpFile" "$bomYamlPath"
+                
+                echo "Created envResources section in bom.yaml"
+                
+                # Update envLine for next step
+                envLine=$(grep -n "envResources:" "$bomYamlPath" | head -1 | cut -d: -f1)
+            else
+                echo "Warning: contextVersion line not found in bom.yaml, cannot create envResources"
+            fi
+        fi
+        
+        if [ -n "$envLine" ]; then
+            # Read the S3 snippet from the module
+            s3SnippetPath="$SCRIPT_DIR/pdmex/helm-snippets/s3/bom-snippet.yaml"
+            
+            if [ -f "$s3SnippetPath" ]; then
+                # Create temp file
+                tmpFile="${bomYamlPath}.tmp"
+                
+                # Get content before insertion point (envResources line)
+                head -n "$envLine" "$bomYamlPath" > "$tmpFile"
+                
+                # Inject snippet once with bomName substitution
+                sed "s/<bomName>/$bomName/g" "$s3SnippetPath" >> "$tmpFile"
+                
+                # Add rest of file after envResources line
+                tail -n +$((envLine + 1)) "$bomYamlPath" >> "$tmpFile"
+                
+                # Replace original
+                mv "$tmpFile" "$bomYamlPath"
+                
+                echo "Added S3 bucket configuration for bomName: $bomName"
+            else
+                echo "Warning: S3 snippet not found at $s3SnippetPath"
+            fi
+        else
+            echo "Warning: Could not find or create envResources line in bom.yaml"
+        fi
+        
+        # Copy S3 ConfigMap to common/templates
+        s3ConfigMapPath="$SCRIPT_DIR/pdmex/helm-snippets/s3/s3-configmap.yaml"
+        commonTemplatesPath="$microAgPath/common/templates"
+        
+        if [ -f "$s3ConfigMapPath" ]; then
+            cp "$s3ConfigMapPath" "$commonTemplatesPath/"
+            echo "Copied s3-configmap.yaml to common/templates/"
+        else
+            echo "Warning: s3-configmap.yaml not found at $s3ConfigMapPath"
         fi
     fi
 else

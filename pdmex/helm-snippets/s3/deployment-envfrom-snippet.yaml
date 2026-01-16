@@ -1,0 +1,3 @@
+envFrom:
+- configMapRef:
+    name: s3-config-map

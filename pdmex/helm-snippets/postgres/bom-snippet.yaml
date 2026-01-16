@@ -2,5 +2,5 @@
       kind: auroraRds
       auroraRdsMachineSize: MINI
       auroraDbPort: 5435
-      auroraDbVersion: '15.9'
+      auroraDbVersion: '15.12'
 
