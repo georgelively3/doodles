@@ -248,7 +248,7 @@ for i in "${!assetIds[@]}"; do
                         head -n $((insertBeforeLine - 1)) "$deploymentFile" > "$tmpFile"
                         
                         # Append annotations snippet with proper indentation (8 spaces - same as other annotations)
-                        while IFS= read -r line; do
+                        while IFS= read -r line || [ -n "$line" ]; do
                             if [ -n "$line" ]; then
                                 echo "        $line" >> "$tmpFile"
                             else
