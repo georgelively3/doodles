@@ -231,7 +231,7 @@ for i in "${!assetIds[@]}"; do
             annotationsSnippet="$SCRIPT_DIR/pdmex/helm-snippets/postgres/deployment-annotations-snippet.yaml"
             
             if [ -f "$annotationsSnippet" ]; then
-                # Find the line with "labels:" after annotations section
+                # Find the line with "labels:" after annotations section (should be at 6 spaces indentation)
                 labelsLine=$(grep -n "^      labels:" "$deploymentFile" | head -1 | cut -d: -f1)
                 
                 if [ -n "$labelsLine" ]; then
@@ -240,8 +240,14 @@ for i in "${!assetIds[@]}"; do
                     # Get content before labels line
                     head -n $((labelsLine - 1)) "$deploymentFile" > "$tmpFile"
                     
-                    # Append annotations snippet with proper indentation (8 spaces)
-                    sed 's/^/        /' "$annotationsSnippet" >> "$tmpFile"
+                    # Append annotations snippet with proper indentation (8 spaces - same as other annotations)
+                    while IFS= read -r line; do
+                        if [ -n "$line" ]; then
+                            echo "        $line" >> "$tmpFile"
+                        else
+                            echo "" >> "$tmpFile"
+                        fi
+                    done < "$annotationsSnippet"
                     
                     # Add newline before labels
                     echo "" >> "$tmpFile"
