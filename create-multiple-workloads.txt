@@ -231,31 +231,36 @@ for i in "${!assetIds[@]}"; do
             annotationsSnippet="$SCRIPT_DIR/pdmex/helm-snippets/postgres/deployment-annotations-snippet.yaml"
             
             if [ -f "$annotationsSnippet" ]; then
-                # Find the line with "labels:" after annotations section (should be at 6 spaces indentation)
-                labelsLine=$(grep -n "^      labels:" "$deploymentFile" | head -1 | cut -d: -f1)
+                # Find the annotations: line in template.metadata section (6 spaces)
+                annotationsLine=$(grep -n "^      annotations:" "$deploymentFile" | head -1 | cut -d: -f1)
                 
-                if [ -n "$labelsLine" ]; then
-                    tmpFile="${deploymentFile}.tmp"
+                if [ -n "$annotationsLine" ]; then
+                    # Find the next line with 4 or 6 spaces at start after annotations (this marks end of annotations block)
+                    # This will be either "spec:" or another metadata section
+                    nextSectionLine=$(tail -n +$((annotationsLine + 1)) "$deploymentFile" | grep -n "^    [a-zA-Z]" | head -1 | cut -d: -f1)
                     
-                    # Get content before labels line
-                    head -n $((labelsLine - 1)) "$deploymentFile" > "$tmpFile"
-                    
-                    # Append annotations snippet with proper indentation (8 spaces - same as other annotations)
-                    while IFS= read -r line; do
-                        if [ -n "$line" ]; then
-                            echo "        $line" >> "$tmpFile"
-                        else
-                            echo "" >> "$tmpFile"
-                        fi
-                    done < "$annotationsSnippet"
-                    
-                    # Add newline before labels
-                    echo "" >> "$tmpFile"
-                    
-                    # Append rest of file from labels line
-                    tail -n +$labelsLine "$deploymentFile" >> "$tmpFile"
-                    
-                    mv "$tmpFile" "$deploymentFile"
+                    if [ -n "$nextSectionLine" ]; then
+                        # Calculate actual line number in file
+                        insertBeforeLine=$((annotationsLine + nextSectionLine))
+                        tmpFile="${deploymentFile}.tmp"
+                        
+                        # Get content before the next section
+                        head -n $((insertBeforeLine - 1)) "$deploymentFile" > "$tmpFile"
+                        
+                        # Append annotations snippet with proper indentation (8 spaces - same as other annotations)
+                        while IFS= read -r line; do
+                            if [ -n "$line" ]; then
+                                echo "        $line" >> "$tmpFile"
+                            else
+                                echo "" >> "$tmpFile"
+                            fi
+                        done < "$annotationsSnippet"
+                        
+                        # Append rest of file from next section line
+                        tail -n +$insertBeforeLine "$deploymentFile" >> "$tmpFile"
+                        
+                        mv "$tmpFile" "$deploymentFile"
+                    fi
                 fi
             fi
             
