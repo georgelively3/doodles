@@ -1,10 +1,11 @@
 #!/bin/bash
 
-# Check if at least 5 arguments are provided (branch + bomName + database flag + s3 flag + at least one git URL)
-if [ $# -lt 5 ]; then
-    echo "Usage: $0 <branch> <bomName> <database> <s3> <git-url1> [git-url2] [git-url3] ..."
-    echo "Example: $0 develop pdmexp y n https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_cd3456.git https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_ef7890.git"
+# Check if at least 6 arguments are provided (branch + bomName + organization + database flag + s3 flag + at least one git URL)
+if [ $# -lt 6 ]; then
+    echo "Usage: $0 <branch> <bomName> <organization> <database> <s3> <git-url1> [git-url2] [git-url3] ..."
+    echo "Example: $0 develop pdmexp george y n https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_cd3456.git https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_ef7890.git"
     echo "Note: bomName must be 6 alphanumeric characters or less"
+    echo "Note: organization is the Bitbucket organization/project key"
     echo "Note: database must be 'y' or 'n' (creates Aurora RDS configuration)"
     echo "Note: s3 must be 'y' or 'n' (creates S3 bucket configuration)"
     exit 1
@@ -27,9 +28,19 @@ if [[ ! "$bomName" =~ ^[a-zA-Z0-9]{1,6}$ ]]; then
     exit 1
 fi
 
-# Assign database flag from third argument and validate
+# Assign organization from third argument and validate
+organization="$1"
+shift  # Remove the third argument (organization) from the argument list
+
+# Validate organization (alphanumeric, may contain hyphens/underscores)
+if [[ -z "$organization" ]]; then
+    echo "Error: organization cannot be empty"
+    exit 1
+fi
+
+# Assign database flag from fourth argument and validate
 database="$1"
-shift  # Remove the third argument (database) from the argument list
+shift  # Remove the fourth argument (database) from the argument list
 
 # Validate database flag
 if [[ ! "$database" =~ ^[yYnN]$ ]]; then
@@ -40,9 +51,9 @@ fi
 # Normalize to lowercase
 database="${database,,}"
 
-# Assign s3 flag from fourth argument and validate
+# Assign s3 flag from fifth argument and validate
 s3="$1"
-shift  # Remove the fourth argument (s3) from the argument list
+shift  # Remove the fifth argument (s3) from the argument list
 
 # Validate s3 flag
 if [[ ! "$s3" =~ ^[yYnN]$ ]]; then
@@ -58,9 +69,9 @@ declare -a assetIds
 declare -a repositories
 declare -a products
 declare -a gitUrls
-organization=""
 parentAssetId=""
 
+echo "Organization: $organization"
 echo "Parsing ${#@} git repositories..."
 echo ""
 
@@ -69,9 +80,8 @@ counter=1
 for gitUrl in "$@"; do
     echo "Parsing repository $counter: $gitUrl"
     
-    # Extract organization and repository name from Bitbucket URL
+    # Extract repository name from Bitbucket URL
     if [[ "$gitUrl" =~ https://bitbkt\.mdtc\.itp01\.p\.fhlmc\.com/scm/([^/]+)/([^/]+)\.git$ ]]; then
-        org="${BASH_REMATCH[1]}"
         repo="${BASH_REMATCH[2]}"
     else
         echo "Error: Invalid Bitbucket URL format: $gitUrl"
@@ -92,17 +102,11 @@ for gitUrl in "$@"; do
         exit 1
     fi
     
-    # Validate that all repositories have the same organization and parentAssetId
+    # Validate that all repositories have the same parentAssetId
     if [ $counter -eq 1 ]; then
-        organization="$org"
         parentAssetId="$parentId"
-        echo "  Organization: $organization"
         echo "  Parent Asset ID: $parentAssetId"
     else
-        if [ "$org" != "$organization" ]; then
-            echo "Error: Mismatched organization. Expected '$organization', got '$org'"
-            exit 1
-        fi
         if [ "$parentId" != "$parentAssetId" ]; then
             echo "Error: Mismatched parent asset ID. Expected '$parentAssetId', got '$parentId'"
             exit 1
