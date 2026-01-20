@@ -327,10 +327,6 @@ for i in "${!assetIds[@]}"; do
             fi
         fi
     fi
-    
-    # Process S3-specific files if s3 flag is 'y'
-    if [ "$s3" == "y" ]; then
-        deploymentFile="$helmDir/templates/deployment.yaml"
 done
 
 # Create mag.yaml file
