@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Check if at least 6 arguments are provided (branch + bomName + organization + database flag + s3 flag + at least one git URL)
+# Check if at least 6 arguments are provided (branch + organization + bomName + database flag + s3 flag + at least one git URL)
 if [ $# -lt 6 ]; then
-    echo "Usage: $0 <branch> <bomName> <organization> <database> <s3> <git-url1> [git-url2] [git-url3] ..."
-    echo "Example: $0 develop pdmexp george y n https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_cd3456.git https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_ef7890.git"
-    echo "Note: bomName must be 6 alphanumeric characters or less"
+    echo "Usage: $0 <branch> <organization> <bomName> <database> <s3> <git-url1> [git-url2] [git-url3] ..."
+    echo "Example: $0 develop george pdmexp y n https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_cd3456.git https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_ef7890.git"
     echo "Note: organization is the Bitbucket organization/project key"
+    echo "Note: bomName must be 6 alphanumeric characters or less"
     echo "Note: database must be 'y' or 'n' (creates Aurora RDS configuration)"
     echo "Note: s3 must be 'y' or 'n' (creates S3 bucket configuration)"
     exit 1
@@ -18,19 +18,25 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 branch="$1"
 shift  # Remove the first argument (branch) from the argument list
 
-# Assign bomName from second argument and validate
+# Assign organization from second argument and validate
+organization="$1"
+shift  # Remove the second argument (organization) from the argument list
+
+# Validate organization (alphanumeric, may contain hyphens/underscores)
+if [[ -z "$organization" ]]; then
+    echo "Error: organization cannot be empty"
+    exit 1
+fi
+
+# Assign bomName from third argument and validate
 bomName="$1"
-shift  # Remove the second argument (bomName) from the argument list
+shift  # Remove the third argument (bomName) from the argument list
 
 # Validate bomName (6 alphanumeric characters or less)
 if [[ ! "$bomName" =~ ^[a-zA-Z0-9]{1,6}$ ]]; then
     echo "Error: bomName must be 1-6 alphanumeric characters. Got: '$bomName'"
     exit 1
 fi
-
-# Assign organization from third argument and validate
-organization="$1"
-shift  # Remove the third argument (organization) from the argument list
 
 # Validate organization (alphanumeric, may contain hyphens/underscores)
 if [[ -z "$organization" ]]; then
