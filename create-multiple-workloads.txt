@@ -283,44 +283,67 @@ for i in "${!assetIds[@]}"; do
     if [ -f "$deploymentFile" ]; then
         # Only inject envFrom if at least one of database or s3 is enabled
         if [ "$database" == "y" ] || [ "$s3" == "y" ]; then
-            # Find the line after the last entry in the env section
-            # We look for the line with "env:" first
+            # Find the line with "env:" first
             envLine=$(grep -n "^[[:space:]]*env:" "$deploymentFile" | head -1 | cut -d: -f1)
             
             if [ -n "$envLine" ]; then
-                # Find the next top-level key after env section (like volumeMounts, resources, etc)
-                # This will be at the same indentation level as "env:"
-                nextSectionLine=$(tail -n +$((envLine + 1)) "$deploymentFile" | grep -n "^[[:space:]]\{10\}[a-zA-Z]" | head -1 | cut -d: -f1)
+                # Determine the indentation level of the env: line
+                envLineContent=$(sed -n "${envLine}p" "$deploymentFile")
+                envIndent=$(echo "$envLineContent" | sed 's/^\([[:space:]]*\).*/\1/' | wc -c)
+                envIndent=$((envIndent - 1))  # wc -c counts the newline, subtract 1
                 
-                if [ -n "$nextSectionLine" ]; then
-                    # Calculate the line number where we should insert (right before next section)
-                    insertLine=$((envLine + nextSectionLine - 1))
+                # Find the next line at the same or lesser indentation that starts a new YAML key
+                # Start searching from the line after env:
+                tmpFile="${deploymentFile}.tmp"
+                insertLine=""
+                lineNum=$((envLine + 1))
+                totalLines=$(wc -l < "$deploymentFile")
+                
+                while [ $lineNum -le $totalLines ]; do
+                    line=$(sed -n "${lineNum}p" "$deploymentFile")
                     
-                    tmpFile="${deploymentFile}.tmp"
+                    # Check if line is not empty and not just whitespace
+                    if echo "$line" | grep -q '[^[:space:]]'; then
+                        # Get the indentation of this line
+                        lineIndent=$(echo "$line" | sed 's/^\([[:space:]]*\).*/\1/' | wc -c)
+                        lineIndent=$((lineIndent - 1))
+                        
+                        # Check if this line has same or less indentation and starts with a letter (new key)
+                        if [ $lineIndent -le $envIndent ]; then
+                            if echo "$line" | grep -q "^[[:space:]]*[a-zA-Z]"; then
+                                insertLine=$lineNum
+                                break
+                            fi
+                        fi
+                    fi
+                    lineNum=$((lineNum + 1))
+                done
+                
+                if [ -n "$insertLine" ]; then
+                    # Get content up to the insertion point (line before next section)
+                    head -n $((insertLine - 1)) "$deploymentFile" > "$tmpFile"
                     
-                    # Get content up to the insertion point
-                    head -n "$insertLine" "$deploymentFile" > "$tmpFile"
+                    # Build the indentation string (use same indentation as env:)
+                    indent=$(printf '%*s' $envIndent '')
+                    itemIndent=$(printf '%*s' $((envIndent + 2)) '')
                     
-                    # Build and append envFrom section with correct indentation (10 spaces to match env)
-                    echo "          envFrom:" >> "$tmpFile"
+                    # Build and append envFrom section with correct indentation
+                    echo "${indent}envFrom:" >> "$tmpFile"
                     
                     # Add db-config-map if database flag is 'y'
                     if [ "$database" == "y" ]; then
-                        echo "          - configMapRef:" >> "$tmpFile"
-                        echo "              name: db-config-map" >> "$tmpFile"
+                        echo "${indent}- configMapRef:" >> "$tmpFile"
+                        echo "${itemIndent}name: db-config-map" >> "$tmpFile"
                     fi
                     
                     # Add s3-config-map if s3 flag is 'y'
                     if [ "$s3" == "y" ]; then
-                        echo "          - configMapRef:" >> "$tmpFile"
-                        echo "              name: s3-config-map" >> "$tmpFile"
+                        echo "${indent}- configMapRef:" >> "$tmpFile"
+                        echo "${itemIndent}name: s3-config-map" >> "$tmpFile"
                     fi
                     
-                    # Add a blank line for spacing
-                    echo "" >> "$tmpFile"
-                    
                     # Append rest of file from the next section
-                    tail -n +$((insertLine + 1)) "$deploymentFile" >> "$tmpFile"
+                    tail -n +$insertLine "$deploymentFile" >> "$tmpFile"
                     
                     mv "$tmpFile" "$deploymentFile"
                 fi
