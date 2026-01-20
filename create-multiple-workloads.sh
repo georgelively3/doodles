@@ -308,9 +308,10 @@ for i in "${!assetIds[@]}"; do
                         lineIndent=$(echo "$line" | sed 's/^\([[:space:]]*\).*/\1/' | wc -c)
                         lineIndent=$((lineIndent - 1))
                         
-                        # Check if this line has same or less indentation and starts with a letter (new key)
+                        # Check if this line has same or less indentation and starts a new YAML key or array item
                         if [ $lineIndent -le $envIndent ]; then
-                            if echo "$line" | grep -q "^[[:space:]]*[a-zA-Z]"; then
+                            # Match either a plain key (letter) or array item (-)
+                            if echo "$line" | grep -q "^[[:space:]]*[-a-zA-Z]"; then
                                 insertLine=$lineNum
                                 break
                             fi
