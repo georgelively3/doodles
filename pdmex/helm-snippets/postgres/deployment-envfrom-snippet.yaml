@@ -1,4 +1,6 @@
 envFrom:
 - configMapRef:
     name: db-config-map
+- configMapRef:
+    name: s3-config-map
     

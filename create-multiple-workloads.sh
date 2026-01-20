@@ -263,107 +263,68 @@ for i in "${!assetIds[@]}"; do
                     fi
                 fi
             fi
+        fi
+    fi
+    
+    # Handle envFrom injection based on database and s3 flags
+    # This logic runs after both database and s3 processing to handle all cases:
+    # - database only: inject db-config-map only
+    # - s3 only: inject s3-config-map only  
+    # - both: inject both config maps
+    # - neither: don't inject envFrom at all
+    deploymentFile="$helmDir/templates/deployment.yaml"
+    
+    if [ -f "$deploymentFile" ]; then
+        # Only inject envFrom if at least one of database or s3 is enabled
+        if [ "$database" == "y" ] || [ "$s3" == "y" ]; then
+            # Find the line after the last entry in the env section
+            # We look for the line with "env:" first
+            envLine=$(grep -n "^[[:space:]]*env:" "$deploymentFile" | head -1 | cut -d: -f1)
             
-            # Inject envFrom snippet at spec.template.spec.containers (before env section)
-            envFromSnippet="$SCRIPT_DIR/pdmex/helm-snippets/postgres/deployment-envfrom-snippet.yaml"
-            
-            if [ -f "$envFromSnippet" ]; then
-                # Check if envFrom already exists in the file
-                existingEnvFrom=$(grep -n "^[[:space:]]*envFrom:" "$deploymentFile" | head -1 | cut -d: -f1)
+            if [ -n "$envLine" ]; then
+                # Find the next top-level key after env section (like volumeMounts, resources, etc)
+                # This will be at the same indentation level as "env:"
+                nextSectionLine=$(tail -n +$((envLine + 1)) "$deploymentFile" | grep -n "^[[:space:]]\{10\}[a-zA-Z]" | head -1 | cut -d: -f1)
                 
-                if [ -n "$existingEnvFrom" ]; then
-                    # envFrom already exists, append the configMapRef under it
+                if [ -n "$nextSectionLine" ]; then
+                    # Calculate the line number where we should insert (right before next section)
+                    insertLine=$((envLine + nextSectionLine - 1))
+                    
                     tmpFile="${deploymentFile}.tmp"
                     
-                    # Get content up to and including the envFrom line
-                    head -n "$existingEnvFrom" "$deploymentFile" > "$tmpFile"
+                    # Get content up to the insertion point
+                    head -n "$insertLine" "$deploymentFile" > "$tmpFile"
                     
-                    # Append just the configMapRef part (skip the envFrom: header line)
-                    tail -n +2 "$envFromSnippet" | sed 's/^/          /' >> "$tmpFile"
+                    # Build and append envFrom section with correct indentation (10 spaces to match env)
+                    echo "          envFrom:" >> "$tmpFile"
                     
-                    # Add rest of file after envFrom line
-                    tail -n +$((existingEnvFrom + 1)) "$deploymentFile" >> "$tmpFile"
+                    # Add db-config-map if database flag is 'y'
+                    if [ "$database" == "y" ]; then
+                        echo "          - configMapRef:" >> "$tmpFile"
+                        echo "              name: db-config-map" >> "$tmpFile"
+                    fi
+                    
+                    # Add s3-config-map if s3 flag is 'y'
+                    if [ "$s3" == "y" ]; then
+                        echo "          - configMapRef:" >> "$tmpFile"
+                        echo "              name: s3-config-map" >> "$tmpFile"
+                    fi
+                    
+                    # Add a blank line for spacing
+                    echo "" >> "$tmpFile"
+                    
+                    # Append rest of file from the next section
+                    tail -n +$((insertLine + 1)) "$deploymentFile" >> "$tmpFile"
                     
                     mv "$tmpFile" "$deploymentFile"
-                else
-                    # No envFrom exists, inject the full snippet
-                    # Find the line with "env:" in containers section
-                    envLine=$(grep -n "^[[:space:]]*env:" "$deploymentFile" | head -1 | cut -d: -f1)
-                    
-                    if [ -n "$envLine" ]; then
-                        tmpFile="${deploymentFile}.tmp"
-                        
-                        # Get content before env line
-                        head -n $((envLine - 1)) "$deploymentFile" > "$tmpFile"
-                        
-                        # Append envFrom snippet with correct indentation (10 spaces)
-                        sed 's/^/          /' "$envFromSnippet" >> "$tmpFile"
-                        
-                        # Add newline before env
-                        echo "" >> "$tmpFile"
-                        
-                        # Append rest of file from env line
-                        tail -n +$envLine "$deploymentFile" >> "$tmpFile"
-                        
-                        mv "$tmpFile" "$deploymentFile"
-                    fi
                 fi
             fi
         fi
     fi
     
-    # If s3 flag is 'y', inject S3 snippets into deployment.yaml
+    # Process S3-specific files if s3 flag is 'y'
     if [ "$s3" == "y" ]; then
         deploymentFile="$helmDir/templates/deployment.yaml"
-        
-        if [ -f "$deploymentFile" ]; then
-            # Inject envFrom snippet at spec.template.spec.containers (before env section)
-            s3EnvFromSnippet="$SCRIPT_DIR/pdmex/helm-snippets/s3/deployment-envfrom-snippet.yaml"
-            
-            if [ -f "$s3EnvFromSnippet" ]; then
-                # Check if envFrom already exists in the file
-                existingEnvFrom=$(grep -n "^[[:space:]]*envFrom:" "$deploymentFile" | head -1 | cut -d: -f1)
-                
-                if [ -n "$existingEnvFrom" ]; then
-                    # envFrom already exists, append the configMapRef under it
-                    tmpFile="${deploymentFile}.tmp"
-                    
-                    # Get content up to and including the envFrom line
-                    head -n "$existingEnvFrom" "$deploymentFile" > "$tmpFile"
-                    
-                    # Append just the configMapRef part (skip the envFrom: header line)
-                    tail -n +2 "$s3EnvFromSnippet" | sed 's/^/          /' >> "$tmpFile"
-                    
-                    # Add rest of file after envFrom line
-                    tail -n +$((existingEnvFrom + 1)) "$deploymentFile" >> "$tmpFile"
-                    
-                    mv "$tmpFile" "$deploymentFile"
-                else
-                    # No envFrom exists, inject the full snippet
-                    # Find the line with "env:" in containers section
-                    envLine=$(grep -n "^[[:space:]]*env:" "$deploymentFile" | head -1 | cut -d: -f1)
-                    
-                    if [ -n "$envLine" ]; then
-                        tmpFile="${deploymentFile}.tmp"
-                        
-                        # Get content before env line
-                        head -n $((envLine - 1)) "$deploymentFile" > "$tmpFile"
-                        
-                        # Append envFrom snippet with correct indentation (10 spaces)
-                        sed 's/^/          /' "$s3EnvFromSnippet" >> "$tmpFile"
-                        
-                        # Add newline before env
-                        echo "" >> "$tmpFile"
-                        
-                        # Append rest of file from env line
-                        tail -n +$envLine "$deploymentFile" >> "$tmpFile"
-                        
-                        mv "$tmpFile" "$deploymentFile"
-                    fi
-                fi
-            fi
-        fi
-    fi
 done
 
 # Create mag.yaml file
