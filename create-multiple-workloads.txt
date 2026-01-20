@@ -292,7 +292,8 @@ for i in "${!assetIds[@]}"; do
                 envIndent=$(echo "$envLineContent" | sed 's/^\([[:space:]]*\).*/\1/' | wc -c)
                 envIndent=$((envIndent - 1))  # wc -c counts the newline, subtract 1
                 
-                # Find the next line at the same or lesser indentation that starts a new YAML key
+                # Find the next line at LESS indentation (not equal) that starts a new YAML key or array item
+                # We want to skip all the env items (which have MORE indentation) and find the next section
                 # Start searching from the line after env:
                 tmpFile="${deploymentFile}.tmp"
                 insertLine=""
@@ -308,9 +309,9 @@ for i in "${!assetIds[@]}"; do
                         lineIndent=$(echo "$line" | sed 's/^\([[:space:]]*\).*/\1/' | wc -c)
                         lineIndent=$((lineIndent - 1))
                         
-                        # Check if this line has same or less indentation and starts a new YAML key or array item
-                        if [ $lineIndent -le $envIndent ]; then
-                            # Match either a plain key (letter) or array item (-)
+                        # Check if this line has LESS indentation (not equal) and starts a new YAML key or array item
+                        # This ensures we skip the env items and find the next container or section
+                        if [ $lineIndent -lt $envIndent ]; then
                             if echo "$line" | grep -q "^[[:space:]]*[-a-zA-Z]"; then
                                 insertLine=$lineNum
                                 break
