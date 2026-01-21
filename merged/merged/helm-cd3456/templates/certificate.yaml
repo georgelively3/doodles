@@ -1,0 +1,19 @@
+{{- if .Values.certificate.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "sample-application.fullname" . }}-tls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sample-application.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "sample-application.fullname" . }}-tls
+  issuerRef:
+    name: {{ .Values.certificate.issuer }}
+    kind: ClusterIssuer
+  commonName: {{ .Values.certificate.commonName }}
+  dnsNames:
+    {{- range .Values.certificate.dnsNames }}
+    - {{ . | quote }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,71 @@
+{
+  "microAGTarget": {
+    "deployable_id": "merged/<repository>",
+    "version": "1.0",
+    "metadata": {
+      "name": "sample-application",
+      "description": "Sample Spring Boot application microAG target configuration",
+      "createdBy": "Development Team",
+      "createdDate": "2025-07-18",
+      "lastModified": "2025-07-18"
+    },
+    "target": {
+      "type": "kubernetes",
+      "platform": "microAG",
+      "deployment": {
+        "strategy": "rolling",
+        "maxUnavailable": "25%",
+        "maxSurge": "25%"
+      },
+      "networking": {
+        "loadBalancer": {
+          "type": "internal",
+          "algorithm": "round_robin"
+        },
+        "ingress": {
+          "enabled": true,
+          "className": "nginx",
+          "tls": true
+        }
+      },
+      "monitoring": {
+        "enabled": true,
+        "metrics": {
+          "prometheus": true,
+          "grafana": true
+        },
+        "logging": {
+          "level": "INFO",
+          "format": "json"
+        }
+      },
+      "security": {
+        "podSecurityContext": {
+          "runAsNonRoot": true,
+          "runAsUser": 1000,
+          "fsGroup": 2000
+        },
+        "networkPolicies": {
+          "enabled": true,
+          "denyAll": false
+        }
+      },
+      "resources": {
+        "requests": {
+          "cpu": "100m",
+          "memory": "256Mi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "512Mi"
+        }
+      },
+      "scaling": {
+        "minReplicas": 2,
+        "maxReplicas": 10,
+        "targetCPUUtilization": 70,
+        "targetMemoryUtilization": 80
+      }
+    }
+  }
+}

@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.<assetId>Svc.Id }}-{{ Values.AbbreviatedEnv }}
+  name: {{ .Values.cd3456Svc.Id }}-{{ Values.AbbreviatedEnv }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "sample-application.labels" . | nindent 4 }}
@@ -21,6 +21,9 @@ spec:
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+        {{- if eq .Values.AwsRegion .Values.AwsRegion1 }}
+        vault.hashicorp.com/agent-inject: "true"
+        {{- end}}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -30,14 +33,14 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ .Values.xk7469Svc.Id }}-{{ Values.AbbreviatedEnv }}
+        - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.<assetId>Svc.Image }}:{{ .Values.<assetId>Svc.ImageTag }}"
+          image: "{{ .Values.cd3456Svc.Image }}:{{ .Values.cd3456Svc.ImageTag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: {{ .Values.<assetId>Svc.targetPort }}
+              containerPort: {{ .Values.cd3456Svc.targetPort }}
               protocol: TCP
           livenessProbe:
             httpGet:
@@ -53,24 +56,21 @@ spec:
             periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          envFrom:
+          - configMapRef:
+              name: db-config-map
+              
           env:
-            - name: PDM_UUID
-              value: {{ .Values.pdmUuid }}
             - name: SPRING_PROFILES_ACTIVE
               value: {{ .Values.spring.profiles.active }}
-        - name: filebeat
-          image: "{{ .Values.filebeat.image }}:{{ .Values.filebeat.imageTag }}"
-          imagePullPolicy: {{ .Values.filebeat.pullPolicy }}
-          args: [
-            "-c", "/etc/filebeat.yml",
-            "-e",
-          ]
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
           volumeMounts:
             - name: config
-              mountPath: /etc/filebeat.yml
-              subPath: filebeat.yml
-          resources:
-            {{- toYaml .Values.filebeat.resources | nindent 12 }}
+              mountPath: /app/config
+              readOnly: true
       volumes:
         - name: config
           configMap:
