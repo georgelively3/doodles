@@ -1,4 +1,0 @@
-<?xml versino="1.0" encoding="UTF-8"?>
-<product id="ab1234" name="ab1234" version="1.0.0">
-    <fab id="s3tst" name="s3tst" direction="outbound" FABtype="Web UI"></fab>
-</product>

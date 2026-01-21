@@ -327,7 +327,7 @@ for i in "${!assetIds[@]}"; do
                     
                     # Build the indentation string (use same indentation as env:)
                     indent=$(printf '%*s' $envIndent '')
-                    itemIndent=$(printf '%*s' $((envIndent + 2)) '')
+                    itemIndent=$(printf '%*s' $((envIndent + 6)) '')
                     
                     # Build and append envFrom section with correct indentation
                     echo "${indent}envFrom:" >> "$tmpFile"
