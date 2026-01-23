@@ -188,7 +188,8 @@ cp -r "$samplePath/helm" "$microAgPath/"
 cp -r "$samplePath/spam" "$microAgPath/"
 cp -r "$samplePath/values" "$microAgPath/"
 cp -r "$samplePath/target" "$microAgPath/"
-echo "Copied base structure from sample (bom, common, helm, spam, values, target)"
+cp "$samplePath/mag.yaml" "$microAgPath/"
+echo "Copied base structure from sample (bom, common, helm, spam, values, target, mag.yaml)"
 
 # Replace placeholders in base helm directory
 find "$microAgPath/helm" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
@@ -354,36 +355,55 @@ for i in "${!assetIds[@]}"; do
     fi
 done
 
-# Create mag.yaml file
+# Process mag.yaml file from template
 echo ""
-echo "Creating mag.yaml..."
+echo "Processing mag.yaml from template..."
 magYamlPath="$microAgPath/mag.yaml"
 
-cat > "$magYamlPath" << EOF
-mag:
-  - name: "$organization~$parentAssetId"
-    type: "owned"
-    description: "$organization $parentAssetId"
-    bomPath: "bom/bom.yaml"
-    spamFolder: "spam"
-    workloads:
-      - name: "common"
-EOF
-
-# Add each helm-<assetId> entry to mag.yaml
-for i in "${!assetIds[@]}"; do
-    assetId="${assetIds[$i]}"
-    repo="${repositories[$i]}"
-    imageName="$repo"
+if [ -f "$magYamlPath" ]; then
+    # Look for the helm-<assetId> template workload entry
+    templateLine=$(grep -n "name: \"helm-<assetId>\"" "$magYamlPath" | head -1 | cut -d: -f1)
     
-    cat >> "$magYamlPath" << EOF
+    if [ -n "$templateLine" ]; then
+        # Create a temporary file with content up to (but not including) the template line
+        tmpFile="${magYamlPath}.tmp"
+        head -n $((templateLine - 1)) "$magYamlPath" > "$tmpFile"
+        
+        # Add each helm-<assetId> entry
+        for i in "${!assetIds[@]}"; do
+            assetId="${assetIds[$i]}"
+            repo="${repositories[$i]}"
+            imageName="$repo"
+            
+            cat >> "$tmpFile" << EOF
       - name: "helm-$assetId"
         images:
           - "$imageName"
 EOF
-done
-
-echo "Created mag.yaml with common + ${#assetIds[@]} workload entries"
+        done
+        
+        # Find the line after the template workload entry ends (next "- name:" at same or less indentation, or end of workloads section)
+        # Skip the template entry and any of its children (images:, etc.)
+        nextWorkloadLine=$(tail -n +$((templateLine + 1)) "$magYamlPath" | grep -n "^      - name:" | head -1 | cut -d: -f1)
+        
+        if [ -n "$nextWorkloadLine" ]; then
+            # There's another workload after template, append rest of file from there
+            skipToLine=$((templateLine + nextWorkloadLine))
+            tail -n +$skipToLine "$magYamlPath" >> "$tmpFile"
+        fi
+        # If no next workload, we've added all entries and file is complete
+        
+        mv "$tmpFile" "$magYamlPath"
+        echo "Processed mag.yaml with ${#assetIds[@]} workload entries from template"
+    else
+        echo "Warning: No helm-<assetId> template found in mag.yaml, performing basic substitution only"
+    fi
+    
+    # Replace placeholders in mag.yaml
+    sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" "$magYamlPath"
+else
+    echo "Warning: mag.yaml template not found, skipping mag.yaml generation"
+fi
 
 # Process bom.yaml file from template
 echo ""
