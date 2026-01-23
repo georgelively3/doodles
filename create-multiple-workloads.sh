@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Check if at least 6 arguments are provided (branch + organization + bomName + database flag + s3 flag + at least one git URL)
+# Check if at least 6 arguments are provided (branch + product + bomName + database flag + s3 flag + at least one git URL)
 if [ $# -lt 6 ]; then
-    echo "Usage: $0 <branch> <organization> <bomName> <database> <s3> <git-url1> [git-url2] [git-url3] ..."
-    echo "Example: $0 develop george pdmexp y n https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_cd3456.git https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_ef7890.git"
-    echo "Note: organization is the Bitbucket organization/project key"
+    echo "Usage: $0 <branch> <product> <bomName> <database> <s3> <git-url1> [git-url2] [git-url3] ..."
+    echo "Example: $0 develop myproduct pdmexp y n https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_cd3456.git https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/raj_ab1234_ef7890.git"
+    echo "Note: product is the product name (used for root folder)"
     echo "Note: bomName must be 6 alphanumeric characters or less"
     echo "Note: database must be 'y' or 'n' (creates Aurora RDS configuration)"
     echo "Note: s3 must be 'y' or 'n' (creates S3 bucket configuration)"
@@ -18,13 +18,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 branch="$1"
 shift  # Remove the first argument (branch) from the argument list
 
-# Assign organization from second argument and validate
-organization="$1"
-shift  # Remove the second argument (organization) from the argument list
+# Assign product from second argument and validate
+product="$1"
+shift  # Remove the second argument (product) from the argument list
 
-# Validate organization (alphanumeric, may contain hyphens/underscores)
-if [[ -z "$organization" ]]; then
-    echo "Error: organization cannot be empty"
+# Validate product (alphanumeric, may contain hyphens/underscores)
+if [[ -z "$product" ]]; then
+    echo "Error: product cannot be empty"
     exit 1
 fi
 
@@ -35,12 +35,6 @@ shift  # Remove the third argument (bomName) from the argument list
 # Validate bomName (6 alphanumeric characters or less)
 if [[ ! "$bomName" =~ ^[a-zA-Z0-9]{1,6}$ ]]; then
     echo "Error: bomName must be 1-6 alphanumeric characters. Got: '$bomName'"
-    exit 1
-fi
-
-# Validate organization (alphanumeric, may contain hyphens/underscores)
-if [[ -z "$organization" ]]; then
-    echo "Error: organization cannot be empty"
     exit 1
 fi
 
@@ -73,11 +67,10 @@ s3="${s3,,}"
 # Arrays to store parsed information from all git URLs
 declare -a assetIds
 declare -a repositories
-declare -a products
 declare -a gitUrls
 parentAssetId=""
 
-echo "Organization: $organization"
+echo "Product: $product"
 echo "Parsing ${#@} git repositories..."
 echo ""
 
@@ -96,15 +89,13 @@ for gitUrl in "$@"; do
     fi
     
     # Extract parentAssetId and assetId from repository name
-    # Look for the last two underscore-separated parts (consistent with create-project-helms.sh)
+    # Look for the last two underscore-separated parts
     if [[ "$repo" =~ _([^_]+)_([^_]+)$ ]]; then
         parentId="${BASH_REMATCH[1]}"
         assetId="${BASH_REMATCH[2]}"
-        # Extract product (everything before the last two underscore-separated parts)
-        prod="${repo%_${parentId}_${assetId}}"
     else
         echo "Error: Repository name '$repo' does not contain at least two underscore-separated parts at the end"
-        echo "Expected format: [product_]parentAssetId_assetId"
+        echo "Expected format: parentAssetId_assetId"
         exit 1
     fi
     
@@ -119,14 +110,12 @@ for gitUrl in "$@"; do
         fi
     fi
     
-    echo "  Product: $prod"
     echo "  Asset ID: $assetId"
     
     # Store information
     gitUrls+=("$gitUrl")
     assetIds+=("$assetId")
     repositories+=("$repo")
-    products+=("$prod")
     
     ((counter++))
 done
@@ -136,25 +125,25 @@ echo "=========================================="
 echo "Creating MicroAG structure"
 echo "=========================================="
 echo "BOM Name: $bomName"
-echo "Organization: $organization"
+echo "Product: $product"
 echo "Parent Asset ID: $parentAssetId"
 echo "Branch: $branch"
 echo "Workloads: ${#assetIds[@]}"
 for i in "${!assetIds[@]}"; do
-    echo "  - ${assetIds[$i]} (${products[$i]})"
+    echo "  - ${assetIds[$i]}"
 done
 echo ""
 
-# Create directory structure: organization/bomName/
-orgPath="$SCRIPT_DIR/$organization"
-microAgPath="$orgPath/$bomName"
+# Create directory structure: product/bomName/
+productPath="$SCRIPT_DIR/$product"
+microAgPath="$productPath/$bomName"
 
-# Create organization directory if it doesn't exist (no prompt)
-if [ ! -d "$orgPath" ]; then
-    mkdir -p "$orgPath"
-    echo "Created organization directory: $orgPath"
+# Create product directory if it doesn't exist (no prompt)
+if [ ! -d "$productPath" ]; then
+    mkdir -p "$productPath"
+    echo "Created product directory: $productPath"
 else
-    echo "Using existing organization directory: $orgPath"
+    echo "Using existing product directory: $productPath"
 fi
 
 # Check if bomName directory already exists
@@ -192,13 +181,13 @@ cp "$samplePath/mag.yaml" "$microAgPath/"
 echo "Copied base structure from sample (bom, common, helm, spam, values, target, mag.yaml)"
 
 # Replace placeholders in base helm directory
-find "$microAgPath/helm" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
+find "$microAgPath/helm" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$product/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
 
 # Replace placeholders in common directory
-find "$microAgPath/common" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
+find "$microAgPath/common" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$product/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
 
 # Replace placeholders in spam directory
-find "$microAgPath/spam" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
+find "$microAgPath/spam" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$product/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
 
 # Create helm-<assetId> directory for each workload
 echo ""
@@ -223,11 +212,10 @@ for i in "${!assetIds[@]}"; do
     echo "Created helm-$assetId directory"
     
     # Replace placeholders in helm files
-    product="${products[$i]}"
     repo="${repositories[$i]}"
     imageName="$repo"
     
-    find "$helmDir" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$assetId/g; s/<organization>/$organization/g; s/<repository>/$repo/g; s/<imageName>/$imageName/g; s/<branch>/$branch/g" {} \;
+    find "$helmDir" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$assetId/g; s/<organization>/$product/g; s/<repository>/$repo/g; s/<imageName>/$imageName/g; s/<branch>/$branch/g" {} \;
     
     # If database flag is 'y', inject database snippets into deployment.yaml
     if [ "$database" == "y" ]; then
@@ -400,7 +388,7 @@ EOF
     fi
     
     # Replace placeholders in mag.yaml
-    sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" "$magYamlPath"
+    sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<assetId>/$parentAssetId/g; s/<organization>/$product/g; s/<repository>/$parentAssetId/g; s/<imageName>/$parentAssetId/g; s/<branch>/$branch/g" "$magYamlPath"
 else
     echo "Warning: mag.yaml template not found, skipping mag.yaml generation"
 fi
@@ -628,12 +616,12 @@ echo "Replacing placeholder values in files..."
 
 # Replace global placeholders in bom directory
 # Note: bom.yaml template already processed, this handles remaining global placeholders
-find "$microAgPath/bom" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<organization>/$organization/g; s/<branch>/$branch/g" {} \;
+find "$microAgPath/bom" -type f \( -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.xml" -o -name "*.tpl" -o -name "*.txt" -o -name "*.md" \) -exec sed -i "s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<organization>/$product/g; s/<branch>/$branch/g" {} \;
 
 echo "Replaced global placeholders:"
 echo "  <bomName> -> $bomName"
 echo "  <parentAssetId> -> $parentAssetId"
-echo "  <organization> -> $organization"
+echo "  <organization> -> $product"
 echo "  <branch> -> $branch"
 echo ""
 echo "Per-workload replacements (handled in template expansion):"
@@ -703,7 +691,7 @@ if [ -d "$sampleValuesPath" ]; then
             fi
             
             # Replace global placeholders in values files (organization, bomName, parentAssetId, branch)
-            sed -i "s/<organization>/$organization/g; s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<product>/$product/g; s/<branch>/$branch/g" "$valuesFile"
+            sed -i "s/<organization>/$product/g; s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<branch>/$branch/g" "$valuesFile"
             
             # Replace any remaining workload-specific placeholders that appear outside template blocks
             # Use first workload as default for any remaining placeholders (edge case handling)
@@ -747,7 +735,7 @@ if [ -d "$sampleTargetPath" ]; then
     cp -r "$sampleTargetPath"/* "$microAgPath/target/"
     
     # Replace global placeholders in target files
-    find "$microAgPath/target" -type f \( -name "*.json" -o -name "*.yaml" -o -name "*.yml" \) -exec sed -i "s/<organization>/$organization/g; s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<product>/$product/g; s/<branch>/$branch/g" {} \;
+    find "$microAgPath/target" -type f \( -name "*.json" -o -name "*.yaml" -o -name "*.yml" \) -exec sed -i "s/<organization>/$product/g; s/<bomName>/$bomName/g; s/<parentAssetId>/$parentAssetId/g; s/<branch>/$branch/g" {} \;
     
     echo "Created target files: $(ls "$microAgPath/target")"
 else
@@ -761,7 +749,7 @@ echo "=========================================="
 echo "Path: $microAgPath"
 echo ""
 echo "Structure:"
-echo "$organization/"
+echo "$product/"
 echo "  $bomName/"
 echo "    mag.yaml (with common + ${#assetIds[@]} workloads)"
 echo "    bom/"
@@ -820,8 +808,8 @@ if [ -f "$PDM_SCRIPT" ]; then
         cd "$helmWorkloadPath"
         
         # Call create-pdm-folder.sh with mapped parameters
-        # productName, imageName, testEngine, repository, bomName, organization
-        if ./"create-pdm-folder.sh" "product" "$imageName" "cucumber" "$repo" "$bomName" "$organization"; then
+        # productName, imageName, testEngine, repository, bomName, product
+        if ./"create-pdm-folder.sh" "product" "$imageName" "cucumber" "$repo" "$bomName" "$product"; then
             echo "✅ PDM structure created successfully for $repo"
             
             # Create zip file
