@@ -20,7 +20,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 serviceAccount: <parentAssetId>-<bomName>
-
+AccountName: <orgPrefix>p0001
 
 podAnnotations:
   prometheus.io/scrape: "true"

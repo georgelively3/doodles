@@ -20,7 +20,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 serviceAccount: <parentAssetId>-<bomName>
-
+AccountName: <orgPrefix>d0001
 
 podAnnotations: {}
 
