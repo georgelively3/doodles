@@ -24,7 +24,7 @@ The `create-multiple-workloads.sh` script automates the creation of:
 ### Syntax
 
 ```bash
-./create-multiple-workloads.sh <branch> <bomName> <git-url1> [git-url2] [git-url3] ...
+./create-multiple-workloads.sh <branch> <product> <bomName> <orgPrefix> <database> <s3> <git-url1> [git-url2] [git-url3] ...
 ```
 
 ### Parameters
@@ -33,49 +33,75 @@ The `create-multiple-workloads.sh` script automates the creation of:
    - Git branch name to use for all repositories
    - Example: `develop`, `main`, `feature/my-feature`
 
-2. **`<bomName>`** (required)
+2. **`<product>`** (required)
+   - Product name (used as root folder name)
+   - Example: `myproduct`, `webapp`, `backend`
+   - Previously called "organization" - this is what you communicate to users about their product
+
+3. **`<bomName>`** (required)
    - Custom name for the BOM folder (1-6 alphanumeric characters)
-   - Used as the directory name under the organization folder
+   - Used as the directory name under the product folder
    - Example: `pdmexp`, `test01`, `app123`
 
-3. **`<git-url1>` `<git-url2>` ...** (at least one required)
+4. **`<orgPrefix>`** (required)
+   - Organization prefix, typically a 2-character string
+   - Used in values files and other configurations
+   - Example: `fm`, `ab`, `xy`
+
+5. **`<database>`** (required)
+   - Database configuration flag: `y` or `n`
+   - `y` - Creates Aurora RDS configuration in BOM and adds database ConfigMap
+   - `n` - No database resources
+
+6. **`<s3>`** (required)
+   - S3 bucket configuration flag: `y` or `n`
+   - `y` - Creates S3 bucket configuration in BOM and adds S3 ConfigMap
+   - `n` - No S3 resources
+
+7. **`<git-url1>` `<git-url2>` ...** (at least one required)
    - Bitbucket repository URLs in the format: `https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/<org>/<repo>.git`
-   - All repositories must belong to the same organization and parent asset ID
-   - Repository name format: `[product_]<parentAssetId>_<assetId>`
+   - All repositories must have the same parent asset ID
+   - Repository name format: `<parentAssetId>_<assetId>`
 
 ### Repository Naming Convention
 
 Repository names must follow this pattern:
 ```
-[product_]<parentAssetId>_<assetId>
+<parentAssetId>_<assetId>
 ```
 
 Examples:
-- `test_ab1234_cd5678` → product: `test`, parentAssetId: `ab1234`, assetId: `cd5678`
-- `myapp_ab1234_ef9012` → product: `myapp`, parentAssetId: `ab1234`, assetId: `ef9012`
-- `ab1234_xy3456` → product: (empty), parentAssetId: `ab1234`, assetId: `xy3456`
+- `ab1234_cd5678` → parentAssetId: `ab1234`, assetId: `cd5678`
+- `ab1234_ef9012` → parentAssetId: `ab1234`, assetId: `ef9012`
+- `xy9999_mn3456` → parentAssetId: `xy9999`, assetId: `mn3456`
 
 **Important:** All repositories in a single execution must:
-- Have the same organization
 - Have the same parentAssetId
 - Have unique assetIds
 
 ## Example Usage
 
-### Single Workload
+### Single Workload with Database Only
 
 ```bash
-./create-multiple-workloads.sh develop pdmexp \
-  https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/test_ab1234_cd5678.git
+./create-multiple-workloads.sh develop myproduct pdmexp fm y n \
+  https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/ab1234_cd5678.git
 ```
 
-### Multiple Workloads
+### Multiple Workloads with Database and S3
 
 ```bash
-./create-multiple-workloads.sh develop pdmexp \
-  https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/test_ab1234_cd5678.git \
-  https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/test_ab1234_ef9012.git \
-  https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/test_ab1234_gh3456.git
+./create-multiple-workloads.sh develop myproduct pdmexp fm y y \
+  https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/ab1234_cd5678.git \
+  https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/ab1234_ef9012.git \
+  https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/ab1234_gh3456.git
+```
+
+### No External Resources
+
+```bash
+./create-multiple-workloads.sh develop myproduct pdmexp fm n n \
+  https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/george/ab1234_cd5678.git
 ```
 
 ## Generated Structure
@@ -83,14 +109,16 @@ Examples:
 The script creates the following directory structure:
 
 ```
-<organization>/
+<product>/
   <bomName>/
-    mag.yaml                          # MicroAG configuration
+    mag.yaml                          # MicroAG configuration (from template)
     bom/
-      bom.yaml                        # Bill of Materials
+      bom.yaml                        # Bill of Materials (from template)
     common/
       templates/
         certificate.yaml
+        db-configmap.yaml             # If database=y
+        s3-configmap.yaml             # If s3=y
     helm/                             # Base helm chart
       Chart.yaml
       templates/
@@ -98,7 +126,7 @@ The script creates the following directory structure:
     helm-<assetId1>/                  # Workload-specific helm chart
       Chart.yaml
       templates/
-        deployment.yaml               # With <assetId>Svc references
+        deployment.yaml               # With <assetId>Svc references and envFrom if db/s3
         service.yaml
         configmap.yaml
         ...
@@ -174,7 +202,8 @@ The script replaces the following placeholders in template files:
 | Placeholder | Replaced With | Scope |
 |------------|---------------|-------|
 | `<bomName>` | bomName parameter | All files |
-| `<organization>` | Extracted from git URL | All files |
+| `<organization>` | product parameter | All files |
+| `<orgPrefix>` | orgPrefix parameter | All files |
 | `<parentAssetId>` | Extracted from repo name | All files |
 | `<branch>` | branch parameter | All files |
 | `<assetId>` | Extracted from repo name | Workload-specific files |
@@ -194,7 +223,7 @@ For each workload, a `pdm/` folder is created in the `helm-<assetId>/` directory
 - **containers**: Container names
 - **test_engine**: Test framework identifier (e.g., cucumber)
 - **run_<imageName>**: Docker run configuration with port mappings
-- **mag**: MicroAG reference in format `<organization>~<bomName>`
+- **mag**: MicroAG reference in format `<product>~<bomName>`
 
 These PDM folders are then:
 1. Zipped into `<repository>-pdm.zip`
@@ -205,37 +234,39 @@ These PDM folders are then:
 
 The script is called with 6 arguments:
 ```bash
-create-pdm-folder.sh <productName> <imageName> <testEngine> <repository> <bomName> <organization>
+create-pdm-folder.sh <productName> <imageName> <testEngine> <repository> <bomName> <orgPrefix>
 ```
 
 Example:
 ```bash
-create-pdm-folder.sh product test_ab1234_cd5678 cucumber test_ab1234_cd5678 pdmexp george
+create-pdm-folder.sh myproduct test_ab1234_cd5678 cucumber test_ab1234_cd5678 pdmexp george
 ```
 
 ## Interactive Prompts
 
 ### Overwrite Confirmation
 The script handles directory creation intelligently:
-- **Organization folder**: Created automatically if it doesn't exist, or reused if it does (no prompt)
+- **Product folder**: Created automatically if it doesn't exist, or reused if it does (no prompt)
 - **BOM folder**: If it already exists, you'll be prompted:
 
 ```
-Using existing organization directory: /path/to/organization
-Warning: BOM directory already exists: /path/to/organization/bomName
+Using existing product directory: /path/to/product
+Warning: BOM directory already exists: /path/to/product/bomName
 Do you want to overwrite it? (y/N):
 ```
 
-Type `y` and press Enter to overwrite the BOM folder, or `N` to abort. This allows teams to add multiple MicroAGs (different bomNames) under their existing organization without risk of overwriting other MicroAGs.
+Type `y` and press Enter to overwrite the BOM folder, or `N` to abort. This allows teams to add multiple MicroAGs (different bomNames) under their existing product without risk of overwriting other MicroAGs.
 
 ## Validation and Error Handling
 
 The script validates:
-- ✅ Correct number of arguments
+- ✅ Correct number of arguments (7)
 - ✅ bomName is 1-6 alphanumeric characters
+- ✅ orgPrefix is not empty
+- ✅ database flag is 'y' or 'n'
+- ✅ s3 flag is 'y' or 'n'
 - ✅ Repository URLs match Bitbucket format
 - ✅ Repository names contain parentAssetId and assetId
-- ✅ All repositories have the same organization
 - ✅ All repositories have the same parentAssetId
 - ✅ Required template directories exist
 
@@ -243,33 +274,59 @@ The script validates:
 
 ### Common Issues
 
-1. **"bomName must be 1-6 alphanumeric characters"**
+1. **"Usage: ./create-multiple-workloads.sh <branch> <product> <bomName> <orgPrefix> <database> <s3> <git-urls...>"**
+   - Ensure you provide exactly 7 or more arguments
+   - Arguments: branch, product, bomName, orgPrefix, database (y/n), s3 (y/n), followed by git URLs
+
+2. **"bomName must be 1-6 alphanumeric characters"**
    - Ensure bomName only contains letters and numbers
    - Keep it 6 characters or less
 
-2. **"Invalid Bitbucket URL format"**
+3. **"orgPrefix cannot be empty"**
+   - The 4th argument (orgPrefix) must be provided
+   - Used to replace `<orgPrefix>` placeholder in templates
+
+4. **"database must be 'y' or 'n'"** or **"s3 must be 'y' or 'n'"**
+   - The 5th argument (database) must be either 'y' or 'n'
+   - The 6th argument (s3) must be either 'y' or 'n'
+
+5. **"Invalid Bitbucket URL format"**
    - Check URL follows: `https://bitbkt.mdtc.itp01.p.fhlmc.com/scm/<org>/<repo>.git`
    - Ensure `.git` extension is present
 
-3. **"Repository name does not contain at least two underscore-separated parts"**
-   - Repository name must follow: `[product_]<parentAssetId>_<assetId>`
-   - Must have at least 2 underscore-separated segments at the end
+6. **"Repository name does not contain at least two underscore-separated parts"**
+   - Repository name must follow: `<parentAssetId>_<assetId>`
+   - Must have at least 2 underscore-separated segments
 
-4. **"Mismatched organization" or "Mismatched parent asset ID"**
-   - All repositories must belong to the same organization
+7. **"Mismatched parent asset ID"**
    - All repositories must have the same parentAssetId
 
-5. **"Sample directory not found"**
+8. **"Sample directory not found"**
    - Ensure the `pdmex/pdm_pdmex_poc048_baseline_nodb/` directory exists in the same location as the script
-   - Required subdirectories: `bom/`, `common/`, `helm/`, `helm-assetId/`, `values/`, `target/`, `spam/`
+   - Required subdirectories: `bom/`, `common/`, `helm/`, `helm-assetId/`, `values/`, `target/`, `spam/`, `mag.yaml`
+
+### Database and S3 ConfigMap Integration
+
+When `database=y`:
+- `db-configmap.yaml` is created in `common/templates/`
+- Each workload's `deployment.yaml` gets an `envFrom` section with database ConfigMap reference
+- The `name:` field is indented 6 spaces under `configMapRef`
+
+When `s3=y`:
+- `s3-configmap.yaml` is created in `common/templates/`
+- Each workload's `deployment.yaml` gets an `envFrom` section with S3 ConfigMap reference
+- The `name:` field is indented 6 spaces under `configMapRef`
+
+Both can be enabled simultaneously, resulting in two `envFrom` entries in each deployment.
 
 ## Sample Templates
 
 The script uses templates from the `pdmex/pdm_pdmex_poc048_baseline_nodb/` directory. To customize:
 
 1. Edit files in `pdmex/pdm_pdmex_poc048_baseline_nodb/` to match your needs
-2. Use placeholders (e.g., `<bomName>`, `<assetId>`) where substitution is needed
+2. Use placeholders (e.g., `<bomName>`, `<assetId>`, `<organization>`, `<orgPrefix>`) where substitution is needed
 3. The script processes templates intelligently:
+   - **mag.yaml**: Copied from template with full placeholder substitution
    - **bom.yaml**: Finds workload template marker (`helm-<assetId>`) and expands for each workload
    - **values files**: Finds template block between comment markers and expands with auto-incrementing ports
    - **Other files**: Global placeholders replaced consistently
