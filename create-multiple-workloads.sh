@@ -462,6 +462,13 @@ if [ -f "$bomYamlPath" ]; then
         echo "Warning: No workload template marker found in bom.yaml (expected 'helm-<assetId>')"
     fi
     
+    # If either database or s3 is enabled, remove the empty array from envResources line
+    if [ "$database" == "y" ] || [ "$s3" == "y" ]; then
+        # Remove the [] from envResources: [] to make it envResources:
+        sed -i 's/envResources: \[\]/envResources:/' "$bomYamlPath"
+        echo "Prepared envResources for resource injection"
+    fi
+    
     # If database flag is 'y', inject database configuration from module
     if [ "$database" == "y" ]; then
         echo "Adding Aurora RDS database configuration to bom.yaml..."
