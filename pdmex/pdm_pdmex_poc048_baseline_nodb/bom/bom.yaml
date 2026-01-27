@@ -13,7 +13,7 @@ spec:
   version: 1
   operatingContext:
     contextVersion: 'v1.0.1'
-    envResources:
+    envResources: []
   metadata:
     timestamp: "2025-07-18T00:00:00Z"
     tools:

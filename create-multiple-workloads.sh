@@ -462,50 +462,12 @@ if [ -f "$bomYamlPath" ]; then
         echo "Warning: No workload template marker found in bom.yaml (expected 'helm-<assetId>')"
     fi
     
-    # Always ensure envResources section exists in bom.yaml
-    echo "Ensuring envResources section exists in bom.yaml..."
-    
-    # Check if envResources line exists
-    envLine=$(grep -n "envResources:" "$bomYamlPath" | head -1 | cut -d: -f1)
-    
-    if [ -z "$envLine" ]; then
-        # envResources doesn't exist, need to create it
-        # Find contextVersion line to determine insertion point and indentation
-        contextLine=$(grep -n "contextVersion:" "$bomYamlPath" | head -1 | cut -d: -f1)
-        
-        if [ -n "$contextLine" ]; then
-            # Get the indentation of contextVersion line
-            indentation=$(sed -n "${contextLine}p" "$bomYamlPath" | sed 's/\(^[[:space:]]*\).*/\1/')
-            
-            tmpFile="${bomYamlPath}.tmp"
-            
-            # Get content up to and including contextVersion line
-            head -n "$contextLine" "$bomYamlPath" > "$tmpFile"
-            
-            # Add envResources - if neither database nor s3, use empty array; otherwise just the key
-            if [ "$database" == "n" ] && [ "$s3" == "n" ]; then
-                echo "${indentation}envResources: []" >> "$tmpFile"
-                echo "Created envResources section with empty array (no database or s3 configured)"
-            else
-                echo "${indentation}envResources:" >> "$tmpFile"
-                echo "Created envResources section in bom.yaml"
-            fi
-            
-            # Add rest of file after contextVersion line
-            tail -n +$((contextLine + 1)) "$bomYamlPath" >> "$tmpFile"
-            
-            mv "$tmpFile" "$bomYamlPath"
-            
-            # Update envLine for next step
-            envLine=$(grep -n "envResources:" "$bomYamlPath" | head -1 | cut -d: -f1)
-        else
-            echo "Warning: contextVersion line not found in bom.yaml, cannot create envResources"
-        fi
-    fi
-    
     # If database flag is 'y', inject database configuration from module
     if [ "$database" == "y" ]; then
         echo "Adding Aurora RDS database configuration to bom.yaml..."
+        
+        # Find envResources line (should exist in template)
+        envLine=$(grep -n "envResources:" "$bomYamlPath" | head -1 | cut -d: -f1)
         
         if [ -n "$envLine" ]; then
             # Read the database snippet from the module
@@ -532,7 +494,7 @@ if [ -f "$bomYamlPath" ]; then
                 echo "Warning: Database snippet not found at $dbSnippetPath"
             fi
         else
-            echo "Warning: Could not find or create envResources line in bom.yaml"
+            echo "Warning: envResources line not found in bom.yaml"
         fi
         
         # Copy database ConfigMap to common/templates
@@ -551,7 +513,7 @@ if [ -f "$bomYamlPath" ]; then
     if [ "$s3" == "y" ]; then
         echo "Adding S3 bucket configuration to bom.yaml..."
         
-        # envResources line should already exist from earlier processing
+        # Find envResources line (should exist in template)
         envLine=$(grep -n "envResources:" "$bomYamlPath" | head -1 | cut -d: -f1)
         
         if [ -n "$envLine" ]; then
@@ -579,7 +541,7 @@ if [ -f "$bomYamlPath" ]; then
                 echo "Warning: S3 snippet not found at $s3SnippetPath"
             fi
         else
-            echo "Warning: Could not find or create envResources line in bom.yaml"
+            echo "Warning: envResources line not found in bom.yaml"
         fi
         
         # Copy S3 ConfigMap to common/templates
