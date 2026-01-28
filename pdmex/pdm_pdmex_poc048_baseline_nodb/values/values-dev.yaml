@@ -22,6 +22,8 @@ fullnameOverride: ""
 
 serviceAccount: <parentAssetId>-<bomName>
 AccountName: <orgPrefix>d0001
+ClusterName: np-use1-eks-01
+AbbreviatedEnv: dev
 
 podAnnotations: {}
 
@@ -29,6 +31,17 @@ podSecurityContext:
   fsGroup: 2000
   runAsNonRoot: true
   runAsUser: 1000
+
+Vault:
+  service: "https://cloudvaulte1.itn01.n.fhlmc.com"
+  role: "1-n-vault-role"
+  credsPath: "/vault/secrets"
+  AdcredsPath: "secret/sf/np/ba0352/ad/cred2"
+  SFApigeeCredsPath: "secret/sf/uat/ba0352/apigee/cred1"
+
+APP:
+  AdcredsFileName: adcred
+  SFApigeeCredsFileName: sfapigeecred
 
 securityContext:
   allowPrivilegeEscalation: false
@@ -85,6 +98,21 @@ env:
   JAVA_OPTS: "-Xmx128m -Xms64m"
   SERVER_PORT: "8080"
   DEBUG: "true"
+
+pdmUuid: "00000000-0000-0000-0000-000000000000"
+
+# Filebeat sidecar configuration
+filebeat:
+  image: docker.elastic.co/beats/filebeat
+  imageTag: "8.11.0"
+  pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 100m
+      memory: 100Mi
+    requests:
+      cpu: 50m
+      memory: 50Mi
 
 # ConfigMap data
 configMap:
