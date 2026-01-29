@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.<assetId>Svc.Id }}-{{ .Values.AbbreviatedEnv }}
+  name: {{ .Values.<assetId>Svc.Id }}-{{ Values.AbbreviatedEnv }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "sample-application.labels" . | nindent 4 }}
@@ -17,25 +17,10 @@ spec:
       labels:
         {{- include "sample-application.selectorLabels" . | nindent 8 }}
       annotations:
-        vault.hashicorp.com/agent-inject: "true"
-        vault.hashicorp.com/agent-init-first: "true"
-        vault.hashicorp.com/agent-inject-status: 'update'
-        vault.hashicorp.com/tls-skip-verify: "true"
-        vault.hashicorp.com/auth-path: {{ printf "auth/%s/%s" .Values.AccountName .Values.ClusterName | quote }}
-        vault.hashicorp.com/service: {{ .Values.Vault.Service | quote }}
-        vault.hashicorp.com/role: {{ .Values.Vault.role | quote }}
-        vault.hashicorp.com/agent-inject-secret-{{ .Values.APP.AdcredsFileName }}: {{ .Values.Vault.AdcredsPath | quote }}
-        vault.hashicorp.com/agent-inject-template-{{ .Values.APP.AdcredsFileName }}: |
-          {{`{{- with secret "`}}{{ .Values.Vault.AdcredsPath }}`" -}}
-          amq.username={{ .Data.username }}
-          amq.pass={{ .Data.password }}
-          {{- end }}`}}
-        vault.hashicorp.com/agent-inject-secret-{{ .Values.APP.SFApigeeCredsFileName }}: {{ .Values.Vault.SFApigeeCredsPath | quote }}
-        vault.hashicorp.com/agent-inject-template-{{ .Values.APP.SFApigeeCredsFileName }}: |
-          {{`{{- with secret "`}}{{ .Values.Vault.SFApigeeCredsPath }}`" -}}
-          client_id={{ .Data.username }}
-          client_secret={{ .Data.password }}
-          {{- end }}`}}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -45,7 +30,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ .Values.<assetId>Svc.Id }}-{{ .Values.AbbreviatedEnv }}
+        - name: {{ .Values.xk7469Svc.Id }}-{{ Values.AbbreviatedEnv }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.<assetId>Svc.Image }}:{{ .Values.<assetId>Svc.ImageTag }}"
